@@ -4,9 +4,46 @@ Stan: 2026-09-28, po poprawkach z commita „Fix startup crash, NWO state drift 
 Metoda: `backtest.py` — ta sama funkcja strategii co live, okno 499 barów, wejście na open następnej
 świecy, fees + slippage, SL przed TP w tej samej świecy, walk-forward 5 okresów (anchored).
 
-Złota i srebra **nie udało się przetestować** w środowisku, w którym powstał ten raport (brak dostępu
-do źródeł danych). Użyto publicznie dostępnych, prawdziwych danych spoza crypto.
-Uruchom lokalnie dla metali:
+## Złoto (XAUUSD) — główny rynek
+
+Dane: publiczne repozytorium `ejtraderLabs/historical-data` (eksport MT5, 2012-05 → 2022-03; czas serwera).
+Koszty: fee 0,01% + slippage 0,005% na stronę (≈ spread detaliczny na złocie). Srebra w tym zbiorze nie ma.
+
+### Strategia bota (NWO + Stoch + CVD)
+
+| Interwał | Konfiguracja live: trades · avg R · t | Walk-forward OOS: trades · avg R · t | Werdykt |
+|----------|---------------------------------------|--------------------------------------|---------|
+| D1 (2 400 świec) | 32 · **−0,39R** · −2,0 | 53 · −0,11R · −0,6 | brak przewagi |
+| H1 (57 600 świec) | 945 · **−0,08R** · −2,0 | 826 · **−0,12R** · −2,4 | **istotnie stratna** |
+
+Na H1 najgorszy jest tier **STOCH STRICT+NWO**: 779 transakcji, −0,17R, t = −4,1. Ten tier wcześniej
+nigdy się nie uruchamiał (błąd kolejności warunków); po naprawie widać, że jest szkodliwy.
+
+### Laboratorium strategii (`research/strategy_lab.py`)
+
+Walk-forward 5 okresów; parametry wyjścia (SL/TP w ATR, filtr trendu, timeout) wybierane tylko na przeszłości.
+Rodzina 18 testów → próg istotności (Bonferroni, α = 5%): **t > 2,77**. Wynik = OOS avg R (t).
+
+| Strategia | D1 | H4 | H1 |
+|-----------|----|----|----|
+| Donchian breakout (20) | −0,04R (−0,3) | +0,02R (+0,2) | −0,01R (−0,2) |
+| RSI(2) pullback w trendzie | −0,24R (−1,1) | −0,18R (−2,0) | −0,08R (−1,2) |
+| Bollinger reversion | +0,06R (+0,2) | −0,04R (−0,3) | −0,14R (−1,6) |
+| London breakout (zakres azjatycki) | — | — | +0,08R (+1,0) |
+| Momentum 60 świec | −0,23R (−1,7) | −0,01R (−0,1) | −0,03R (−0,7) |
+| **Losowe wejścia (punkt odniesienia)** | +0,03R (+0,2) | +0,16R (+1,0) | −0,04R (−0,3) |
+
+London breakout przy innych założeniach strefy czasowej danych: UTC+2 → +0,13R (t = 1,65), UTC+3 → +0,05R (t = 0,71).
+
+**Wnioski dla złota:**
+- Żadna strategia nie przekracza progu istotności; większość jest w zakresie, w którym mieszczą się losowe wejścia.
+- **London breakout** jest jedynym kandydatem konsekwentnie dodatnim poza próbą — do dalszych badań
+  (dokładne godziny sesji w UTC, realny spread w oknie otwarcia Londynu, dłuższa historia), **nie do handlu**.
+- Strategia bota nie powinna być używana do automatycznego handlu złotem.
+
+## Inne rynki
+
+Uruchom lokalnie dla aktualnych danych metali (Yahoo Finance):
 
 ```bash
 python backtest.py --yf GC=F --symbol XAU/USD --timeframe 1h   # złoto, ~2 lata 1h
@@ -38,5 +75,5 @@ python backtest.py --yf GC=F --symbol XAU/USD --timeframe 1d --since 2005-01-01
 4. **STOCH-ONLY jest najgorszy** w 3 z 4 rynków — to wspiera wyłączenie go domyślnie.
 5. Walk-forward wybiera różne parametry w każdym okresie — kolejny znak, że optymalizacja dopasowuje się do szumu.
 
-**Rekomendacja:** nie używać tej strategii do automatycznego handlu. Jeśli metale wyjdą podobnie,
-traktować bota jako narzędzie do alertów i kontekstu, a nie źródło przewagi.
+**Rekomendacja:** nie używać tej strategii do automatycznego handlu — na złocie wynik jest istotnie ujemny.
+Bot ma wartość jako narzędzie do alertów i kontekstu, a nie źródło przewagi.
