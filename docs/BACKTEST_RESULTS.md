@@ -28,9 +28,9 @@ python backtest.py --yf GC=F --symbol XAU/USD --timeframe 1d --since 2005-01-01
 
 ## Wnioski
 
-1. **Brak dowodu przewagi.** 1 z 4 rynków przekracza t = 2. Przy czterech niezależnych testach
-   szansa, że przynajmniej jeden przekroczy ten próg czystym przypadkiem, wynosi ok. 17% — pojedynczy
-   wynik YHOO nie jest dowodem.
+1. **Brak dowodu przewagi.** 1 z 4 rynków przekracza t = +2. Przy czterech niezależnych testach
+   strategii bez przewagi szansa, że przynajmniej jeden przekroczy ten próg przypadkiem, to ok. 9%
+   (1 − 0,977⁴). Do tego średnia z czterech rynków jest bliska zera — pojedynczy wynik YHOO nie jest dowodem.
 2. **Ranking tierów jest losowy.** Najlepszy tier to kolejno: CONFLUENCE (EURUSD), STOCH-ONLY (NVDA),
    CONFLUENCE (YHOO), STOCH+NWO (ORCL). Gdyby któryś filtr niósł informację, wygrywałby konsekwentnie.
 3. **Handel pod trend jest gorszy** w 3 z 4 rynków (wyjątek: EURUSD) — to wspiera domyślne
