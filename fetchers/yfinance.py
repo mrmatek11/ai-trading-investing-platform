@@ -317,6 +317,10 @@ class YFinanceDataFetcher:
         if "/USD" in sym_upper and sym_upper not in FOREX_TICKERS and sym_upper not in ("XAU/USD", "XAG/USD"):
             return "CRYPTO"
         
+        # Futures surowcowe (GC=F, SI=F, CL=F…) — przed forex, bo też zawierają "="
+        if sym_upper in COMMODITY_TICKERS.values():
+            return "COMMODITY"
+
         # Forex patterns
         if "=" in symbol or sym_upper in FOREX_TICKERS:
             return "FOREX"

@@ -166,6 +166,38 @@ class TestSimulation(unittest.TestCase):
         self.assertEqual(df["close"].tolist(), [1.5, 1.8])
 
 
+class TestYahooSource(unittest.TestCase):
+    """--yf: format yfinance (MultiIndex kolumn), resampling 4h, typ rynku futures."""
+
+    def _fake_download(self, *args, **kwargs):
+        idx = pd.date_range("2026-01-05 00:00", periods=8, freq="h")
+        cols = pd.MultiIndex.from_product([["Open", "High", "Low", "Close", "Adj Close", "Volume"], ["GC=F"]])
+        vals = np.column_stack([np.arange(8) + 100.0, np.arange(8) + 101.0, np.arange(8) + 99.0,
+                                np.arange(8) + 100.5, np.arange(8) + 100.5, np.full(8, 10.0)])
+        return pd.DataFrame(vals, index=idx, columns=cols)
+
+    def test_fetch_resamples_4h(self):
+        try:
+            import yfinance  # noqa: F401
+        except ImportError:
+            self.skipTest("yfinance nie zainstalowane")
+        import backtest as bt
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch("yfinance.download", side_effect=self._fake_download):
+            df = bt.fetch_yfinance("GC=F", "4h", "2026-01-01", cache_dir=tmp)
+        self.assertEqual(len(df), 2)
+        self.assertEqual(df["open"].tolist(), [100.0, 104.0])
+        self.assertEqual(df["high"].tolist(), [104.0, 108.0])
+        self.assertEqual(df["volume"].tolist(), [40.0, 40.0])
+        self.assertEqual(str(df.index.tz), "UTC")
+
+    def test_futures_market_type(self):
+        from fetchers.yfinance import YFinanceDataFetcher as Y
+        self.assertEqual(Y.get_market_type("GC=F"), "COMMODITY")
+        self.assertEqual(Y.get_market_type("SI=F"), "COMMODITY")
+        self.assertEqual(Y.get_market_type("EURUSD=X"), "FOREX")
+
+
 class TestApiAuth(unittest.TestCase):
 
     def setUp(self):

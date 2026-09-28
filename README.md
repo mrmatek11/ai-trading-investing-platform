@@ -607,9 +607,15 @@ window the bot sees (`candles_per_fetch - 1` closed bars):
 # CSV (header with timestamp/open/high/low/close/volume, or raw klines from data.binance.vision)
 python backtest.py --csv data/BTCUSDT-1h.csv --symbol BTC/USDT --timeframe 1h
 
+# Gold / silver from Yahoo Finance (1h: last ~730 days; 1d: full history)
+python backtest.py --yf GC=F --symbol XAU/USD --timeframe 1h
+python backtest.py --yf SI=F --symbol XAG/USD --timeframe 1d --since 2010-01-01
+
 # Download history via ccxt (cached in data/)
 python backtest.py --fetch --symbol ETH/USDT --timeframe 4h --since 2022-01-01 --trades-out trades.csv
 ```
+
+Results on real non-crypto data so far: [docs/BACKTEST_RESULTS.md](docs/BACKTEST_RESULTS.md).
 
 Treat `|t| < 2` as "indistinguishable from noise" — a random walk regularly produces a small positive average R.
 

@@ -24,6 +24,10 @@ Użycie:
   # Pobranie historii przez ccxt (zapis do data/ jako cache)
   python backtest.py --fetch --symbol BTC/USDT --timeframe 1h --since 2023-01-01
 
+  # Złoto / srebro z Yahoo Finance (1h: ostatnie ~730 dni, 1d: pełna historia)
+  python backtest.py --yf GC=F --symbol XAU/USD --timeframe 1h
+  python backtest.py --yf SI=F --symbol XAG/USD --timeframe 1d --since 2010-01-01
+
   # Eksport transakcji
   python backtest.py --csv ... --trades-out trades.csv
 """
@@ -119,6 +123,38 @@ def fetch_history(symbol: str, timeframe: str, since: str, exchange_id: str = "b
     path = os.path.join(cache_dir, f"{symbol.replace('/', '')}-{timeframe}.csv")
     df.to_csv(path, index=False)
     print(f"[fetch] zapisano {path}")
+    return load_csv(path)
+
+
+def fetch_yfinance(ticker: str, timeframe: str, since: str, cache_dir: str = "data") -> pd.DataFrame:
+    """Pobierz historię z Yahoo Finance (np. GC=F złoto, SI=F srebro) i zapisz do CSV.
+
+    Yahoo daje dane intraday tylko wstecz: 1h ~730 dni, 15m ~60 dni. 4h = resampling z 1h.
+    """
+    import yfinance as yf
+
+    interval = {"1h": "1h", "4h": "1h", "15m": "15m", "1d": "1d"}.get(timeframe)
+    if interval is None:
+        raise ValueError(f"Nieobsługiwany timeframe dla Yahoo: {timeframe} (1h, 4h, 15m, 1d)")
+    start = pd.Timestamp(since, tz="UTC")
+    limit_days = {"1h": 729, "15m": 59}.get(interval)
+    if limit_days:
+        start = max(start, pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=limit_days))
+    raw = yf.download(ticker, start=start.strftime("%Y-%m-%d"), interval=interval,
+                      auto_adjust=False, progress=False)
+    if raw.empty:
+        raise RuntimeError(f"Yahoo nie zwróciło danych dla {ticker} {interval}")
+    if isinstance(raw.columns, pd.MultiIndex):
+        raw.columns = raw.columns.get_level_values(0)
+    df = raw.rename(columns=str.lower)[["open", "high", "low", "close", "volume"]]
+    df.index = pd.DatetimeIndex(df.index).tz_localize("UTC") if df.index.tz is None else df.index.tz_convert("UTC")
+    if timeframe == "4h":
+        df = df.resample("4h").agg({"open": "first", "high": "max", "low": "min",
+                                    "close": "last", "volume": "sum"}).dropna()
+    os.makedirs(cache_dir, exist_ok=True)
+    path = os.path.join(cache_dir, f"{ticker.replace('=', '').replace('^', '')}-{timeframe}.csv")
+    df.rename_axis("timestamp").to_csv(path)
+    print(f"[yfinance] {ticker} {timeframe}: {len(df)} świec → {path}")
     return load_csv(path)
 
 
@@ -478,7 +514,8 @@ def main(argv: Optional[Iterable[str]] = None):
     ap = argparse.ArgumentParser(description="Backtest NWO+Stoch+CVD z fees, slippage i walk-forward")
     src = ap.add_mutually_exclusive_group(required=True)
     src.add_argument("--csv", help="Plik CSV z OHLCV")
-    src.add_argument("--fetch", action="store_true", help="Pobierz historię przez ccxt")
+    src.add_argument("--fetch", action="store_true", help="Pobierz historię przez ccxt (crypto)")
+    src.add_argument("--yf", metavar="TICKER", help="Pobierz historię z Yahoo Finance, np. GC=F (złoto), SI=F (srebro)")
     ap.add_argument("--symbol", default="BTC/USDT")
     ap.add_argument("--timeframe", "-tf", default="1h")
     ap.add_argument("--since", default="2023-01-01", help="Start historii dla --fetch")
@@ -498,6 +535,8 @@ def main(argv: Optional[Iterable[str]] = None):
 
     if args.csv:
         df = load_csv(args.csv)
+    elif args.yf:
+        df = fetch_yfinance(args.yf, args.timeframe, args.since)
     else:
         df = fetch_history(args.symbol, args.timeframe, args.since, args.exchange)
 
