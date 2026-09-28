@@ -174,13 +174,15 @@ Bullish: CVD > CVD SMA
 Bearish: CVD < CVD SMA
 ```
 
-### Signal Confluence
-| Signal | Required Conditions |
-|--------|-------------------|
-| **LONG** | NWO bullish crossover + Stoch oversold crossover + CVD bullish |
-| **SHORT** | NWO bearish crossunder + Stoch overbought crossunder + CVD bearish |
-| **Strong** | All 3 indicators align + with trend (price > EMA200) |
-| **Counter-trend** | Indicators align but against trend → flagged as ⚠️ RISKY |
+### Signal Tiers (checked in this order — first match wins)
+| Tier | Conditions (LONG; SHORT mirrored) | Confidence |
+|------|-----------------------------------|------------|
+| **CONFLUENCE** | Stoch K×D cross up with K<30 + NWO histogram > 0 + CVD z-score > 0.5 (0.3 on TradFi) | HIGH |
+| **STOCH STRICT+NWO** | Stoch K×D cross up with K<20 + NWO histogram > 0 | HIGH |
+| **STOCH+NWO** | Stoch K×D cross up with K<30 + NWO histogram > 0 | MEDIUM |
+| **STOCH-ONLY** | K enters oversold zone (no NWO/CVD) — **off by default**, enable with `--stoch-only` | LOW |
+
+Trend = EMA20 vs EMA100. By default (`--trend-filter block`) counter-trend signals are not sent.
 
 ---
 
@@ -431,8 +433,8 @@ python bot.py --strategy nwo_stoch_cvd --webhook URL     # Full NWO + Stoch + CV
 python bot.py --strategy stoch_7_3_2 --webhook URL       # Stochastic only
 
 # Trend filter modes
-python bot.py --trend-filter alert --webhook URL   # Flag counter-trend signals (default)
-python bot.py --trend-filter block --webhook URL   # Block counter-trend signals entirely
+python bot.py --trend-filter block --webhook URL   # Block counter-trend signals entirely (default)
+python bot.py --trend-filter alert --webhook URL   # Send counter-trend signals with a warning
 python bot.py --trend-filter off --webhook URL     # No trend filtering
 
 # Position tracking & auto-trade
@@ -475,7 +477,8 @@ python bot.py --log DEBUG --webhook URL
 | `--sentiment` | Enable news sentiment filter | `false` |
 | `--no-sentiment` | Disable sentiment | `false` |
 | `--market` | Market: `crypto`, `stocks`, `both` | `crypto` |
-| `--trend-filter` | Trend mode: `alert`, `block`, `off` | `alert` |
+| `--trend-filter` | Trend mode: `alert`, `block`, `off` | `block` |
+| `--stoch-only` | Enable the weakest STOCH-ONLY tier | `false` |
 | `--position-size` | Default position size (USD) | `100` |
 | `--no-positions` | Disable position tracking | `false` |
 | `--auto-trade` | Enable auto position opening | `false` |
@@ -589,6 +592,35 @@ crypto-signal-bot-v4-glm/
 
 ---
 
+## 📈 Backtest
+
+`backtest.py` runs the **exact live strategy function** over history, bar by bar, with the same
+window the bot sees (`candles_per_fetch - 1` closed bars):
+
+- entry at the **next bar's open**, fees (default 0.1%/side) and slippage (0.05%) included
+- gaps through SL/TP fill at the open; SL and TP in the same bar → counted as **SL**
+- per-tier and with/against-trend breakdown, t-stat of average R
+- **walk-forward**: SL/TP, trend mode and allowed tiers are chosen only on past data and
+  evaluated on the next unseen period — the "OOS TOTAL" row is the number to trust
+
+```bash
+# CSV (header with timestamp/open/high/low/close/volume, or raw klines from data.binance.vision)
+python backtest.py --csv data/BTCUSDT-1h.csv --symbol BTC/USDT --timeframe 1h
+
+# Download history via ccxt (cached in data/)
+python backtest.py --fetch --symbol ETH/USDT --timeframe 4h --since 2022-01-01 --trades-out trades.csv
+```
+
+Treat `|t| < 2` as "indistinguishable from noise" — a random walk regularly produces a small positive average R.
+
+## 🔐 REST API
+
+Set `API_KEY` to require an `X-API-Key` header on every endpoint except `/api/health`.
+Without `API_KEY`, read-only endpoints stay open (local use) and `POST /api/config/update` is disabled.
+`API_CORS_ORIGINS` (comma-separated) restricts browser origins.
+
+---
+
 ## ⚠️ Disclaimer
 
 This bot is for **educational and informational purposes only**. It does not constitute financial advice. Trading cryptocurrencies and other financial instruments involves significant risk. Always do your own research and never trade with money you can't afford to lose.
@@ -597,7 +629,10 @@ This bot is for **educational and informational purposes only**. It does not con
 
 ## 📜 License
 
-MIT License — feel free to modify and use for your own purposes.
+MIT License — feel free to modify and use for your own purposes, **except**
+`strategy/neural_weight_oscillator.py`: it is a port of Zeiierman's *Neural Weight Oscillator*,
+licensed **CC BY-NC-SA 4.0** (non-commercial, share-alike). It must not be used in a paid product
+without the author's permission.
 
 ---
 
