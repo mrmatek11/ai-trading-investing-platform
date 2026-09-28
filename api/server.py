@@ -23,7 +23,9 @@ Uzycie:
   # API dostepne na http://localhost:8080/api/
 """
 
+import hmac
 import logging
+import os
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timezone
 
@@ -31,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 # FastAPI jest opcjonalne — bot dziala bez niego
 try:
-    from fastapi import FastAPI, HTTPException
+    from fastapi import Depends, FastAPI, HTTPException, Request
     from fastapi.middleware.cors import CORSMiddleware
     import uvicorn
     FASTAPI_AVAILABLE = True
@@ -54,19 +56,35 @@ def create_api_app(bot_instance=None) -> Any:
         logger.warning("FastAPI/uvicorn nie zainstalowane! pip install fastapi uvicorn")
         return None
 
+    # Auth: jesli ustawiony API_KEY, kazdy endpoint poza /api/health wymaga
+    # naglowka X-API-Key. Bez API_KEY endpointy do odczytu dzialaja (lokalnie),
+    # ale zapis konfiguracji jest wylaczony.
+    api_key = os.getenv("API_KEY", "")
+    if not api_key:
+        logger.warning("API_KEY nie ustawiony — API bez autoryzacji, /api/config/update wylaczony")
+
+    async def require_api_key(request: Request):
+        if not api_key or request.url.path == "/api/health":
+            return
+        if not hmac.compare_digest(request.headers.get("x-api-key", ""), api_key):
+            raise HTTPException(status_code=401, detail="Invalid or missing X-API-Key")
+
     app = FastAPI(
         title="Crypto Signal Bot API",
         description="REST API for KOMBAJN DO RYNKU — Multi-Asset Signal Bot",
         version="5.0.0",
+        dependencies=[Depends(require_api_key)],
     )
 
-    # CORS — pozwala na integracje z innymi backendami
+    # CORS — API_CORS_ORIGINS="https://a.com,https://b.com" (domyslnie: *).
+    # Bez credentials: autoryzacja idzie naglowkiem, nie cookies.
+    cors_origins = [o.strip() for o in os.getenv("API_CORS_ORIGINS", "*").split(",") if o.strip()]
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_origins=cors_origins,
+        allow_credentials=False,
+        allow_methods=["GET", "POST"],
+        allow_headers=["X-API-Key", "Content-Type"],
     )
 
     # Referencja do bota
@@ -226,6 +244,8 @@ def create_api_app(bot_instance=None) -> Any:
     @app.post("/api/config/update")
     async def update_config(updates: Dict):
         """Update config at runtime (limited fields)."""
+        if not api_key:
+            raise HTTPException(status_code=403, detail="Set API_KEY to enable config updates")
         if not _bot:
             raise HTTPException(status_code=503, detail="Bot not initialized")
 

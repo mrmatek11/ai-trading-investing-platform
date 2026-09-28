@@ -45,6 +45,17 @@ _use_sentiment = False  # Domyślnie OFF — włącza config.use_sentiment
 _use_closed_bar = True
 
 
+# STOCH-ONLY (samo wejście K w strefę OB/OS, bez NWO/CVD) — domyślnie OFF.
+# To najsłabszy i najczęstszy tier: przy wielu symbolach i TF generuje głównie szum.
+_allow_stoch_only = False
+
+
+def set_stoch_only_enabled(enabled: bool):
+    """Włącz/wyłącz najsłabszy tier sygnałów STOCH-ONLY (default: OFF)."""
+    global _allow_stoch_only
+    _allow_stoch_only = enabled
+
+
 def set_closed_bar_mode(enabled: bool):
     """Włącz/wyłącz tryb zamkniętego baru (default: ON — anti-repaint)."""
     global _use_closed_bar
@@ -79,17 +90,17 @@ SL_ATR_MULT = 3.0
 TP_ATR_MULT = 4.5
 
 # Trend filter mode:
-#   "alert" = alertuj z ostrzeżeniem ⚠️ (default)
-#   "block" = całkowita blokada — nie alertuj w ogóle
+#   "alert" = alertuj z ostrzeżeniem ⚠️
+#   "block" = całkowita blokada — nie alertuj w ogóle (default)
 #   "off"   = brak filtra trendu
-TREND_FILTER_MODE = "alert"
+TREND_FILTER_MODE = "block"
 
 
 def get_nwo_instance(symbol: str, timeframe: str, config: NWOConfig = None) -> NeuralWeightOscillator:
     """Get or create persistent NWO instance PER symbol+timeframe.
     
-    FIX #7: Po utworzeniu instancji, próbuje wczytać zapisane wagi z pliku JSON.
-    Dzięki temu bot nie zaczyna od zera po restarcie.
+    Instancja jest cache'owana tylko po to, by nie liczyć BWM od nowa;
+    stan treningu jest zerowany w każdym compute().
     """
     global _nwo_config
     if config is None:
@@ -102,12 +113,9 @@ def get_nwo_instance(symbol: str, timeframe: str, config: NWOConfig = None) -> N
         _nwo_config = config
     
     if key not in _nwo_instances:
+        # Bez load_weights(): compute() i tak trenuje od zera na każdym oknie
+        # (deterministyczny wynik), więc wczytane wagi zostałyby nadpisane.
         _nwo_instances[key] = NeuralWeightOscillator(config)
-        # FIX #7: Wczytaj zapisane wagi (jeśli istnieją)
-        try:
-            _nwo_instances[key].load_weights(symbol, timeframe)
-        except Exception:
-            pass  # Pierwszy start — nie ma zapisanych wag, OK
     
     return _nwo_instances[key]
 
@@ -188,7 +196,8 @@ def strategy_nwo_stoch_cvd(df: pd.DataFrame, symbol: str, timeframe: str) -> Lis
     cvd_available = True
     if is_trad_market:
         # Check last 5 bars for zero volume (market closed)
-        recent_volume = df['volume'].iloc[-5:] if 'volume' in df.columns else pd.Series([1]*5)
+        # Okno kończy się na barze sygnałowym i (nie na formującym się i+1)
+        recent_volume = df['volume'].iloc[max(0, i - 4):i + 1] if 'volume' in df.columns else pd.Series([1]*5)
         if len(recent_volume) > 0 and recent_volume.sum() == 0:
             cvd_available = False
         # Also check if CVD is NaN (often the case for forex)
@@ -269,15 +278,7 @@ def strategy_nwo_stoch_cvd(df: pd.DataFrame, symbol: str, timeframe: str) -> Lis
             reason = (f"CONFLUENCE LONG: Stoch({stoch_k:.1f}) x D({stoch_d:.1f}) | "
                      f"NWO hist={histogram_val:.2f}(>0) | CVD=N/A (market closed)")
     
-    # Priority 2: STOCH+NWO (Stoch relaxed + NWO filter) — GŁÓWNY TRIGGER
-    elif stoch_bull_relaxed and nwo_bullish:
-        go_long = True
-        source = "STOCH+NWO"
-        confidence = "MEDIUM"
-        reason = (f"STOCH+NWO LONG: Stoch({stoch_k:.1f}) x D({stoch_d:.1f}) | "
-                 f"NWO hist={histogram_val:.2f}(>0 bullish)")
-    
-    # Priority 3: STOCH STRICT + NWO (oryginalny v2 — wysoka pewność, rzadszy)
+    # Priority 2: STOCH STRICT + NWO (K<20/K>80 — podzbiór relaxed, więc musi być sprawdzony PRZED nim)
     elif stoch_bull_strict and nwo_bullish:
         go_long = True
         source = "STOCH STRICT+NWO"
@@ -285,8 +286,16 @@ def strategy_nwo_stoch_cvd(df: pd.DataFrame, symbol: str, timeframe: str) -> Lis
         reason = (f"STOCH STRICT+NWO LONG: Stoch({stoch_k:.1f}) x D({stoch_d:.1f}) K<20 | "
                  f"NWO hist={histogram_val:.2f}(>0)")
     
+    # Priority 3: STOCH+NWO (Stoch relaxed + NWO filter) — GŁÓWNY TRIGGER
+    elif stoch_bull_relaxed and nwo_bullish:
+        go_long = True
+        source = "STOCH+NWO"
+        confidence = "MEDIUM"
+        reason = (f"STOCH+NWO LONG: Stoch({stoch_k:.1f}) x D({stoch_d:.1f}) | "
+                 f"NWO hist={histogram_val:.2f}(>0 bullish)")
+    
     # Priority 4: STOCH-ONLY (zone signal — najsłabszy, ale najczęstszy)
-    elif stoch_bull_zone:
+    elif _allow_stoch_only and stoch_bull_zone:
         go_long = True
         source = "STOCH-ONLY"
         confidence = "LOW"
@@ -355,15 +364,7 @@ def strategy_nwo_stoch_cvd(df: pd.DataFrame, symbol: str, timeframe: str) -> Lis
             reason = (f"CONFLUENCE SHORT: Stoch({stoch_k:.1f}) x D({stoch_d:.1f}) | "
                      f"NWO hist={histogram_val:.2f}(<0) | CVD=N/A (market closed)")
     
-    # Priority 2: STOCH+NWO (Stoch relaxed + NWO filter) — GŁÓWNY TRIGGER
-    elif stoch_bear_relaxed and nwo_bearish:
-        go_short = True
-        source = "STOCH+NWO"
-        confidence = "MEDIUM"
-        reason = (f"STOCH+NWO SHORT: Stoch({stoch_k:.1f}) x D({stoch_d:.1f}) | "
-                 f"NWO hist={histogram_val:.2f}(<0 bearish)")
-    
-    # Priority 3: STOCH STRICT + NWO (oryginalny v2 — wysoka pewność, rzadszy)
+    # Priority 2: STOCH STRICT + NWO (K<20/K>80 — podzbiór relaxed, więc musi być sprawdzony PRZED nim)
     elif stoch_bear_strict and nwo_bearish:
         go_short = True
         source = "STOCH STRICT+NWO"
@@ -371,8 +372,16 @@ def strategy_nwo_stoch_cvd(df: pd.DataFrame, symbol: str, timeframe: str) -> Lis
         reason = (f"STOCH STRICT+NWO SHORT: Stoch({stoch_k:.1f}) x D({stoch_d:.1f}) K>80 | "
                  f"NWO hist={histogram_val:.2f}(<0)")
     
+    # Priority 3: STOCH+NWO (Stoch relaxed + NWO filter) — GŁÓWNY TRIGGER
+    elif stoch_bear_relaxed and nwo_bearish:
+        go_short = True
+        source = "STOCH+NWO"
+        confidence = "MEDIUM"
+        reason = (f"STOCH+NWO SHORT: Stoch({stoch_k:.1f}) x D({stoch_d:.1f}) | "
+                 f"NWO hist={histogram_val:.2f}(<0 bearish)")
+    
     # Priority 4: STOCH-ONLY (zone signal — najsłabszy, ale najczęstszy)
-    elif stoch_bear_zone:
+    elif _allow_stoch_only and stoch_bear_zone:
         go_short = True
         source = "STOCH-ONLY"
         confidence = "LOW"

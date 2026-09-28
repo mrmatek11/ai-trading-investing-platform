@@ -10,11 +10,11 @@ echo "🚀 Crypto Signal Bot — Starting..."
 echo "   Mode: 📡 ALERT ONLY (no execution)"
 echo "   Symbols: ${SYMBOLS:-BTC/USDT,ETH/USDT,SOL/USDT,BNB/USDT,XRP/USDT,DOGE/USDT,ADA/USDT,AVAX/USDT,DOT/USDT,LINK/USDT}"
 echo "   Timeframes: ${TIMEFRAMES:-5m,15m,1h}"
-echo "   Trend filter: ${TREND_FILTER:-alert}"
+echo "   Trend filter: ${TREND_FILTER:-block}"
 echo "   Market: ${MARKET:-both}"
 echo "   Closed-bar: ${USE_CLOSED_BAR:-true}"
 echo "   AI Sentiment: ${SENTIMENT:-false}"
-echo "   GLM AI Analyst: ${GLM_API_KEY:+✅}${GLM_API_KEY:-❌}"
+echo "   GLM AI Analyst: $([ -n "$GLM_API_KEY" ] && echo ✅ || echo ❌)"
 echo "═════════════════════════════════════════════════════════"
 
 # Build command using bash array (proper quoting)
@@ -44,6 +44,10 @@ fi
 # Trend filter
 if [ -n "$TREND_FILTER" ]; then
     ARGS+=("--trend-filter" "$TREND_FILTER")
+fi
+
+if [ "$STOCH_ONLY" = "true" ]; then
+    ARGS+=("--stoch-only")
 fi
 
 # Market source

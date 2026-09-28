@@ -39,6 +39,12 @@ def normalize(x: float, lo: float, hi: float) -> float:
     return clamp((x - lo) / (hi - lo) * 100.0, 0.0, 100.0)
 
 
+def normalize_series(x: pd.Series, lo: float, hi: float) -> pd.Series:
+    """Wektorowy odpowiednik normalize() — identyczny wynik, łącznie z NaN → 0.0."""
+    out = ((x - lo) / (hi - lo) * 100.0).clip(0.0, 100.0)
+    return out.fillna(0.0)
+
+
 def ema(series: pd.Series, length: int) -> pd.Series:
     return series.ewm(span=length, adjust=False, min_periods=length).mean()
 
@@ -132,15 +138,16 @@ def calc_cvd(close: pd.Series, high: pd.Series, low: pd.Series, volume: pd.Serie
 
 def barssince(condition: pd.Series) -> pd.Series:
     """PineScript ta.barssince() — bars since last true condition."""
-    result = pd.Series(np.nan, index=condition.index)
+    cond = condition.to_numpy(dtype=bool)
+    out = np.full(len(cond), np.nan)
     count = np.nan
-    for i in range(len(condition)):
-        if condition.iloc[i]:
-            count = 0
+    for i in range(len(cond)):
+        if cond[i]:
+            count = 0.0
         elif not np.isnan(count):
-            count += 1
-        result.iloc[i] = count
-    return result
+            count += 1.0
+        out[i] = count
+    return pd.Series(out, index=condition.index)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -317,7 +324,18 @@ class NeuralWeightOscillator:
         self.bwm_momentum = self.bwm_weights[2]
         self.bwm_error = bwm_objective(self.bwm_weights, bo, ow, best_idx, worst_idx)
         
-        # Training state (persistent across calls — like PineScript var)
+        self._reset_training_state()
+
+    def _reset_training_state(self):
+        """Wyzeruj stan treningu.
+
+        compute() przelicza CAŁY DataFrame bar po barze (jak PineScript przy
+        przeliczeniu historii), więc stan musi startować od zera przy każdym
+        wywołaniu. Wcześniej stan przechodził między wywołaniami — te same bary
+        były trenowane wielokrotnie, a pierwsze targety porównywały początek
+        nowego okna z końcem poprzedniego. Wynik: ten sam df dawał inny oscylator
+        przy każdym skanie (niereprodukowalne sygnały, backtest niemożliwy).
+        """
         self._memory: deque = deque(maxlen=self.config.memory_size)
         self._tw_trend = 0.01
         self._tw_mean = 0.01
@@ -356,6 +374,8 @@ class NeuralWeightOscillator:
         n = len(df)
         if n < cfg.warmup_bars:
             return self._empty_result(n)
+
+        self._reset_training_state()
         
         # ─── Market Components ─────────────────────────────────────────────
         ema_fast = ema(close, cfg.len_fast)
@@ -367,7 +387,7 @@ class NeuralWeightOscillator:
         trend_spread = (ema_fast - ema_slow) / atr
         trend_slope = (ema_fast - ema_fast.shift(1)) / atr
         trend_raw = trend_spread + trend_slope
-        trend_score = trend_raw.apply(lambda x: normalize(x, -2.5, 2.5))
+        trend_score = normalize_series(trend_raw, -2.5, 2.5)
         
         # Mean Reversion
         basis = sma(close, cfg.len_momentum)
@@ -378,16 +398,16 @@ class NeuralWeightOscillator:
         )
         
         rsi_reversion = 100 - rsi
-        z_reversion = (-z_score).apply(lambda x: normalize(x, -2.5, 2.5))
+        z_reversion = normalize_series(-z_score, -2.5, 2.5)
         mean_score = rsi_reversion * 0.5 + z_reversion * 0.5
         
         # Momentum
         roc = close / close.shift(cfg.len_momentum) - 1.0
-        roc_norm = roc.apply(lambda x: normalize(x, -0.05, 0.05))
+        roc_norm = normalize_series(roc, -0.05, 0.05)
         
         rsi_momentum = rsi
         ema_momentum_raw = (ema_fast - ema_fast.shift(1)) / atr
-        ema_momentum = ema_momentum_raw.apply(lambda x: normalize(x, -0.5, 0.5))
+        ema_momentum = normalize_series(ema_momentum_raw, -0.5, 0.5)
         
         momentum_score = roc_norm * 0.45 + rsi_momentum * 0.35 + ema_momentum * 0.20
         
@@ -417,13 +437,23 @@ class NeuralWeightOscillator:
         # Pre-compute ai prediction components
         ai_pred_raw_full = np.full(n, np.nan)
         
+        # numpy zamiast .iloc w pętli bar-po-barze (~10x szybciej, ten sam wynik)
+        trend_feature_a = trend_feature.to_numpy(dtype=float)
+        mean_feature_a = mean_feature.to_numpy(dtype=float)
+        momentum_feature_a = momentum_feature.to_numpy(dtype=float)
+        atr_a = atr.to_numpy(dtype=float)
+        close_a = close.to_numpy(dtype=float)
+        trend_score_a = trend_score.to_numpy(dtype=float)
+        mean_score_a = mean_score.to_numpy(dtype=float)
+        momentum_score_a = momentum_score.to_numpy(dtype=float)
+
         for i in range(n):
             # Store features for delayed training
-            self._prev_trend_features.append(trend_feature.iloc[i] if not pd.isna(trend_feature.iloc[i]) else 0)
-            self._prev_mean_features.append(mean_feature.iloc[i] if not pd.isna(mean_feature.iloc[i]) else 0)
-            self._prev_momentum_features.append(momentum_feature.iloc[i] if not pd.isna(momentum_feature.iloc[i]) else 0)
-            self._prev_atr.append(atr.iloc[i] if not pd.isna(atr.iloc[i]) else 0)
-            self._prev_close.append(close.iloc[i])
+            self._prev_trend_features.append(trend_feature_a[i] if not pd.isna(trend_feature_a[i]) else 0)
+            self._prev_mean_features.append(mean_feature_a[i] if not pd.isna(mean_feature_a[i]) else 0)
+            self._prev_momentum_features.append(momentum_feature_a[i] if not pd.isna(momentum_feature_a[i]) else 0)
+            self._prev_atr.append(atr_a[i] if not pd.isna(atr_a[i]) else 0)
+            self._prev_close.append(close_a[i])
             
             # Training: check if we have enough delayed data
             if (cfg.use_training and i > cfg.warmup_bars and
@@ -433,7 +463,7 @@ class NeuralWeightOscillator:
                 old_mean = self._prev_mean_features[0]
                 old_momentum = self._prev_momentum_features[0]
                 
-                target = close.iloc[i] / self._prev_close[0] - 1.0
+                target = close_a[i] / self._prev_close[0] - 1.0
                 target_direction = 1.0 if target > 0 else (-1.0 if target < 0 else 0.0)
                 
                 quality_vol = max(abs(self._prev_atr[0] / self._prev_close[0]), 0.000001)
@@ -501,18 +531,18 @@ class NeuralWeightOscillator:
             momentum_amplifier = 1.0 + learn_momentum * blend
             
             # AI prediction
-            if not pd.isna(trend_feature.iloc[i]):
-                ai_pred_raw = (self._tw_trend * trend_feature.iloc[i] +
-                              self._tw_mean * mean_feature.iloc[i] +
-                              self._tw_momentum * momentum_feature.iloc[i] +
+            if not pd.isna(trend_feature_a[i]):
+                ai_pred_raw = (self._tw_trend * trend_feature_a[i] +
+                              self._tw_mean * mean_feature_a[i] +
+                              self._tw_momentum * momentum_feature_a[i] +
                               self._t_bias)
                 ai_pred_raw_full[i] = ai_pred_raw
             
             # ─── Oscillator ────────────────────────────────────────────────
-            if not pd.isna(trend_score.iloc[i]):
-                trend_pressure = (trend_score.iloc[i] - 50.0) * self.bwm_trend * trend_amplifier
-                mean_pressure = (mean_score.iloc[i] - 50.0) * self.bwm_mean * mean_amplifier
-                momentum_pressure = (momentum_score.iloc[i] - 50.0) * self.bwm_momentum * momentum_amplifier
+            if not pd.isna(trend_score_a[i]):
+                trend_pressure = (trend_score_a[i] - 50.0) * self.bwm_trend * trend_amplifier
+                mean_pressure = (mean_score_a[i] - 50.0) * self.bwm_mean * mean_amplifier
+                momentum_pressure = (momentum_score_a[i] - 50.0) * self.bwm_momentum * momentum_amplifier
                 
                 raw_osc = 50.0 + trend_pressure + mean_pressure + momentum_pressure
                 

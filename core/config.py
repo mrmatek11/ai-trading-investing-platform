@@ -85,14 +85,15 @@ class BotConfig:
     volume_mult: float = 1.5
 
     # --- Trend Filter -------------------------------------------------------
-    trend_filter_mode: str = "alert"               # "alert", "block", "off" — alertuj against-trend (wiecej sygnalow)
+    trend_filter_mode: str = "block"               # "alert", "block", "off" — block = nie wysylaj sygnalow pod trend
+    allow_stoch_only: bool = False                 # Najslabszy tier STOCH-ONLY (sama strefa K, bez NWO) — duzo szumu
 
     # --- Anti-Repaint -------------------------------------------------------
     use_closed_bar: bool = True                  # True = sygnaly na ZAMKNIETYM barze (anti-repaint); False = live (moze repaintowac)
 
     # --- Scanning -----------------------------------------------------------
     scan_interval: int = 60                      # Sekundy miedzy skanami
-    candles_per_fetch: int = 100                 # Ile swiec pobierac
+    candles_per_fetch: int = 500                 # Ile swiec pobierac (strategia NWO wymaga min. 120, EMA200 — 200)
     cooldown_per_signal: int = 300                # Sekundy cooldown dla tego samego sygnalu (5 min)
 
     # --- AI News Sentiment --------------------------------------------------
@@ -332,7 +333,7 @@ def config_scalping() -> BotConfig:
         symbols=["BTC/USDT", "ETH/USDT", "SOL/USDT"],
         timeframes=["1m", "5m"],
         scan_interval=15,
-        candles_per_fetch=50,
+        candles_per_fetch=300,                   # min. 120 dla strategii NWO
         require_crossover=True,
         cooldown_per_signal=60,
     )

@@ -84,8 +84,9 @@ class StochSignalBot:
         )
         # Propagate closed-bar mode do custom_strategy
         try:
-            from strategy.custom_strategy import set_closed_bar_mode
+            from strategy.custom_strategy import set_closed_bar_mode, set_stoch_only_enabled
             set_closed_bar_mode(config.use_closed_bar)
+            set_stoch_only_enabled(config.allow_stoch_only)
         except ImportError:
             pass
 
@@ -1206,6 +1207,12 @@ class StochSignalBot:
 def run_single_scan(config: BotConfig, test_mode: bool = True, strategy: str = "nwo_stoch_cvd"):
     """Uruchom pojedynczy skan i wyswietl wyniki (bez petli, bez Discord)."""
     from strategy.custom_strategy import get_current_nwo_state, strategy_nwo_stoch_cvd, STRATEGY_REGISTRY
+    import strategy.custom_strategy as custom_strategy
+
+    # Te same ustawienia strategii co w petli bota (wczesniej --scan je ignorowal)
+    custom_strategy.set_closed_bar_mode(config.use_closed_bar)
+    custom_strategy.set_stoch_only_enabled(config.allow_stoch_only)
+    custom_strategy.TREND_FILTER_MODE = config.trend_filter_mode
 
     use_nwo = strategy == "nwo_stoch_cvd"
 
@@ -1342,6 +1349,8 @@ Przyklady:
                         help='Rynek: crypto (Binance), stocks (YFinance), both')
     parser.add_argument('--trend-filter', type=str, default=None,
                         choices=['alert', 'block', 'off'])
+    parser.add_argument('--stoch-only', action='store_true',
+                        help='Wlacz najslabszy tier STOCH-ONLY (sama strefa K, bez filtra NWO)')
     parser.add_argument('--position-size', type=float, default=None)
     parser.add_argument('--no-positions', action='store_true')
     parser.add_argument('--auto-trade', action='store_true')
@@ -1449,6 +1458,8 @@ Przyklady:
         config.market_source = args.market
     if args.trend_filter:
         config.trend_filter_mode = args.trend_filter
+    if args.stoch_only:
+        config.allow_stoch_only = True
     if args.no_positions:
         config.use_position_tracking = False
     if args.position_size:
