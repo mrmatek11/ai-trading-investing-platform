@@ -296,6 +296,10 @@ Stała stopka przy wnioskach: *analiza Twoich historycznych danych, nie rekomend
 
 ### 5.1 Zasady
 
+> Makieta (4 ekrany, klikalny prototyp, przełącznik palety dla daltonistów):
+> https://claude.ai/artifact/G3qikykCs35xRkiZRBc9ch
+
+
 1. **Dane najpierw, interfejs na końcu.** Brak dekoracji, gradientów i ilustracji w aplikacji. Każdy piksel pokazuje dane albo prowadzi do działania.
 2. **Kolor = znaczenie.** UI jest monochromatyczne. Kolor pojawia się tylko dla: zysku, straty, jednego akcentu (fokus i akcja główna) oraz ostrzeżenia.
 3. **Liczby są pierwszoplanowe.** Cyfry tabelaryczne (`tnum`), wyrównanie do prawej, zawsze ten sam format (separator tysięcy, stała liczba miejsc w kolumnie).
@@ -325,8 +329,8 @@ Kontrast tekstu ≥ 4.5:1 w obu motywach (sprawdzić narzędziem przed wdrożeni
 
 | Element | Wartość |
 |---------|---------|
-| Font UI | **Inter** (z `font-feature-settings: "tnum", "cv11"`) |
-| Font liczb i linii poleceń | **JetBrains Mono** |
+| Font UI | **IBM Plex Sans** (z `font-variant-numeric: tabular-nums`) — neutralny, techniczny, bez generycznego wyglądu Intera |
+| Font liczb i linii poleceń | **IBM Plex Mono** — ta sama rodzina, więc liczby i tekst się nie gryzą |
 | Skala | 12 · 13 · 14 · 16 · 20 · 28 px (13 = domyślny tekst w tabelach) |
 | Siatka | 4 px; padding komórek 8/12 px (compact/comfortable) |
 | Promień | 6 px (przyciski, inputy), 0 px (panele terminala) |
