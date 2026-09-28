@@ -1,8 +1,10 @@
 # Tape — specyfikacja produktu
 
-> **Tape** to nazwa robocza (od *reading the tape*). Jedno miejsce dla aktywnego tradera:
-> **terminal rynkowy, trading journal, analiza portfela i platforma botów — spięte warstwą AI,
-> która zna Twoje transakcje.**
+> **Tape** to nazwa robocza (od *reading the tape*). Jedno miejsce dla aktywnego tradera
+> **złota i srebra**: terminal rynkowy z globusem zdarzeń, trading journal, analiza portfela
+> i platforma botów — spięte warstwą AI, która zna Twoje transakcje i czyta newsy ze świata.
+>
+> Makieta: https://claude.ai/artifact/G3qikykCs35xRkiZRBc9ch
 >
 > Dokument startowy dla **osobnego repo**. Bot sygnałowy z tego repo zostaje osobnym projektem;
 > Tape reużywa z niego wybrane moduły (sekcja 11), ale **nie** `neural_weight_oscillator.py`
@@ -69,12 +71,18 @@ Jedna aplikacja, w której **dane o Twoich transakcjach są centrum**, a wszystk
    Pozwala odpowiedzieć, *kiedy* Twój edge działa.
 4. **Rynek polski.** Import z XTB, mBanku, Bossy, rozliczenie PIT-38 z kursem NBP. Globalni gracze tego nie robią.
 5. **Boty tylko na udokumentowanym edge'u.** Strategię uruchamiasz dopiero po backteście z walk-forwardem i paper tradingu.
+6. **Globus zdarzeń + analiza newsów z publicznym track recordem.** Wojny, banki centralne, makro, kopalnie
+   i szlaki handlowe na jednej mapie, z oceną AI, jak każde zdarzenie wpływa na złoto i srebro —
+   i z uczciwie liczoną historią trafności tej oceny (sekcja 4.6).
 
 ### Dla kogo (kolejność)
 
-1. **Aktywni traderzy crypto** (perpy, spot) — dane przez API są darmowe i dostępne, a społeczność gotowa (Discord bota).
-2. **Traderzy prop firm** (MT5, cTrader, TradeLocker) — płacą za narzędzia i muszą pilnować reguł drawdownu.
-3. **Polscy inwestorzy giełdowi** (XTB, IBKR, mBank) — portfolio i PIT-38.
+1. **Traderzy złota i srebra** — XAUUSD / XAGUSD na CFD (XTB, MT5, cTrader), futures GC / SI (IBKR),
+   ETF-y (GLD, SLV). Złoto to jeden z najczęściej handlowanych instrumentów u polskich brokerów i w prop firmach.
+2. **Traderzy prop firm** (MT5, cTrader, TradeLocker) — w dużej części handlują złotem, płacą za narzędzia
+   i muszą pilnować reguł drawdownu.
+3. **Polscy inwestorzy** (XTB, IBKR, mBank) — portfolio i PIT-38.
+4. **Crypto** — później; importery i dane są tanie, ale to nie główny rynek produktu.
 
 ---
 
@@ -117,13 +125,14 @@ Przy każdej różnicy między segmentami pokazywany jest **t-stat**. Mała pró
 Minimalistyczny, sterowany klawiaturą, w stylu Bloomberga, ale bez jego chaosu.
 
 - **Linia poleceń** (zawsze na górze, `/` lub `⌘K`): `<symbol> <funkcja>`
-  - `BTC GP` wykres · `BTC DES` opis/fundamenty · `ETH NEWS` newsy · `SOL FUND` funding i OI
-  - `ECO` kalendarz makro · `WEI` indeksy świata · `CORR BTC ETH SOL` korelacje · `HEAT` heatmapa rynku
-  - `JRNL SOL` Twoje transakcje na SOL · `ASK <pytanie>` AI
+  - `XAU GP` / `XAG GP` wykres · `XAU NEWS` newsy · `GLOBE XAU` globus zdarzeń (2.5)
+  - `GSR` relacja złoto/srebro · `COT XAU` pozycjonowanie (CFTC) · `ETF` zasoby GLD/SLV · `CB` zakupy banków centralnych
+  - `RY` realne rentowności · `DXY` dolar · `ECO` kalendarz makro · `CORR XAU XAG DXY RY` korelacje
+  - `JRNL XAU` Twoje transakcje na złocie · `ASK <pytanie>` AI
 - **Workspace'y:** dokowalne panele (wykres, watchlista, news, order book, kalendarz, pozycje),
   zapisywane układy, synchronizacja symbolu między panelami (grupy kolorów jak w Bloombergu).
-- **Dane:** crypto real-time (websockety giełd), akcje i FX z licencjonowanego dostawcy (sekcja 6.6),
-  news z AI-streszczeniem i oceną wpływu, kalendarz makro, funding, OI, liquidations, F&G.
+- **Dane:** metale spot i FX real-time, futures COMEX (opóźnione albo z licencją), realne rentowności, DXY,
+  COT, zasoby ETF, zakupy banków centralnych, news z AI-streszczeniem i oceną wpływu, kalendarz makro (sekcja 6.6).
 - **Alerty:** cena, zmienność, funding, news o symbolu z Twojego portfela, poziom S/R.
 - **Twoje transakcje na wykresie:** każdy wykres pokazuje Twoje historyczne wejścia i wyjścia.
 
@@ -138,6 +147,37 @@ Minimalistyczny, sterowany klawiaturą, w stylu Bloomberga, ale bez jego chaosu.
 | Monitoring | Porównanie live vs backtest vs paper. Każda transakcja bota trafia do journala jak ręczna. |
 
 **Nie robimy:** marketplace'u strategii ani copy tradingu. To regulowana działalność, a przy tym magnes na scamy.
+
+### 2.5 Globus zdarzeń (faza 3; dane zbierane od fazy 1)
+
+Trójwymiarowa ziemia jako główny widok terminala: **co się dzieje na świecie i jak to wpływa na złoto i srebro.**
+
+| Warstwa | Co pokazuje | Źródła (do weryfikacji licencji) |
+|---------|-------------|----------------------------------|
+| Konflikty | Wojny, ataki, sankcje, napięcia na szlakach (Ormuz, Bab al-Mandab, Suez, Malakka) | GDELT 2.0, newsy, ACLED (licencja komercyjna płatna) |
+| Banki centralne | Decyzje i wypowiedzi (Fed, EBC, PBoC, NBP…), zakupy złota | Komunikaty i RSS banków, kalendarz |
+| Makro | Publikacje (CPI, NFP, PCE, PMI) z konsensusem i niespodzianką | Moduł kalendarza z bota |
+| Podaż | Kopalnie złota i srebra (Meksyk, Peru, Chiny, RPA, Australia…), strajki, katastrofy, rafinerie | Warstwa statyczna kopalni + newsy, USGS, GDACS |
+| Rynki | Sesje (Londyn, Nowy Jork, Szanghaj), LBMA / COMEX, przepływy ETF, popyt fizyczny (Indie, Chiny) | Kalendarz sesji, dane ETF, newsy |
+
+**Punkt = zdarzenie** (klaster newsów o jednej sprawie, nie pojedynczy artykuł):
+kolor = wpływ na wybrane aktywo wg AI (byczo / niedźwiedzio / neutralnie), wielkość = waga,
+pierścień = ostatnia godzina. Kliknięcie otwiera panel: streszczenie, źródła, wpływ na XAU i XAG
+z uzasadnieniem, analogie historyczne („podobne zdarzenia od 2019: 9, XAU po 1 dniu: mediana +0,4%”).
+
+**Interakcje:** obrót i zoom, filtr warstw, oś czasu (odtwarzanie ostatnich 24 h / 7 dni),
+przełącznik XAU / XAG / USD, tryb 2D (mapa płaska, domyślny na telefonie), lista zdarzeń jako
+dostępna alternatywa dla globusa. **Z journala:** klik w transakcję → globus w chwili wejścia
+(„co się działo na świecie, gdy otwierałem tę pozycję”).
+
+**Wygląd:** kropkowane lądy (Natural Earth), brak tekstur, atmosfery i autoobrotu, jedna rodzina
+kolorów znaczeniowych jak w reszcie aplikacji.
+
+**Technologia:**
+- **globe.gl** (three.js) — punkty, pierścienie, łuki, heksy; najszybsza droga do efektu 3D.
+- **deck.gl `GlobeView`** — gdy punktów będą setki tysięcy (WebGL2, agregacja na GPU).
+- **MapLibre GL JS** (projekcja globe) — tryb 2D/3D z prawdziwą mapą wektorową.
+- Zdarzenia wysyłane do klienta przez WebSocket; na mapie max ~500 klastrów naraz, reszta w liście.
 
 ---
 
@@ -162,8 +202,8 @@ Import to **najważniejsza funkcja produktu**. Jeśli nie działa perfekcyjnie, 
 
 | Giełda | Priorytet | Uwagi |
 |--------|-----------|-------|
-| Binance (spot, USDⓈ-M, COIN-M) | P0 | Historia transakcji spot wymaga zapytań per symbol. Starsza historia z eksportu CSV. Sprawdzamy flagi uprawnień klucza. |
-| Bybit (Unified) | P0 | Endpoint historii egzekucji ma limit wstecz — starsze dane z CSV. |
+| Binance (spot, USDⓈ-M, COIN-M) | P1 | Historia transakcji spot wymaga zapytań per symbol. Starsza historia z eksportu CSV. Sprawdzamy flagi uprawnień klucza. |
+| Bybit (Unified) | P1 | Endpoint historii egzekucji ma limit wstecz — starsze dane z CSV. |
 | OKX, Bitget | P1 | |
 | Hyperliquid | P1 | Publiczne API po adresie portfela — **bez klucza**. |
 | Kraken, Coinbase Advanced, KuCoin, Gate, MEXC | P2 | |
@@ -176,7 +216,7 @@ Import to **najważniejsza funkcja produktu**. Jeśli nie działa perfekcyjnie, 
 | Interactive Brokers (i Lynx) | **Flex Web Service** (token + Flex Query ID, XML) | P0 | Read-only z natury, pełna historia (zapytania w oknach). Najlepsze źródło danych w branży. |
 | Trading 212 | Publiczne API (klucz) | P1 | Zweryfikować zakres (Invest / ISA; CFD?) i status beta. |
 | Saxo | OpenAPI (OAuth) | P2 | |
-| cTrader | Open API (OAuth) | P1 | Wiele prop firm. |
+| cTrader | Open API (OAuth) | P0 | Wiele prop firm, popularne złoto. |
 | TradeLocker, Match-Trader, DXtrade | API platform | P2 | Prop firmy; dostęp często przez firmę, a nie tradera. |
 | Alpaca, Tastytrade, Schwab, Tradier | API | P3 | Rynek US. |
 | **Agregator** (np. SnapTrade) | Jedno API → wiele brokerów | P2 | Szybkie pokrycie US/CA i części EU. Płatne per użytkownik; sprawdzić listę brokerów EU. |
@@ -191,7 +231,7 @@ Import to **najważniejsza funkcja produktu**. Jeśli nie działa perfekcyjnie, 
 | Degiro | `Transactions.csv`, `Account.csv` | P1 | |
 | eToro | Account statement (XLSX) | P2 | Sprawdzić też oficjalne API. |
 | Revolut | Wyciąg trading (CSV) | P2 | |
-| MetaTrader 4 / 5 | Detailed Statement (HTML) / Report (XLSX) | P1 | Uzupełnienie EA (sekcja 3.1) dla historii. |
+| MetaTrader 4 / 5 | Detailed Statement (HTML) / Report (XLSX) | P0 | Uzupełnienie EA (sekcja 3.1) dla historii. Główna platforma dla XAUUSD. |
 | Potwierdzenia transakcji (PDF z maila) | Mail-in: `import-<id>@tape.app` | P3 | Parsowanie PDF przez Claude + walidacja. |
 
 **Import uniwersalny (każdy CSV/XLSX):**
@@ -260,6 +300,7 @@ a model dostaje gotowe liczby i narzędzia o wąskim zakresie. Każda liczba w o
 | **Mapowanie importu** | Sekcja 3.2. Structured output, człowiek zatwierdza. |
 | **Klasyfikacja** | Tagowanie transakcji, kategoryzacja operacji z wyciągów, streszczenia newsów z oceną wpływu na portfel. |
 | **Parsowanie PDF** | Potwierdzenia transakcji z maila → kanoniczne transakcje. Walidacja sum kontrolnych. |
+| **Nastawienie newsów (XAU, XAG)** | Sekcja 4.6. Klasyfikacja zdarzeń + agregacja w kodzie + publiczny track record. |
 
 ### 4.3 Implementacja (Claude API)
 
@@ -289,6 +330,65 @@ a model dostaje gotowe liczby i narzędzia o wąskim zakresie. Każda liczba w o
 
 AI mówi jak rzetelny analityk: liczby, próba, niepewność. Nigdy „kup” ani „sprzedaj”.
 Stała stopka przy wnioskach: *analiza Twoich historycznych danych, nie rekomendacja inwestycyjna.*
+
+### 4.6 Nastawienie newsów: long / short dla złota i srebra
+
+Cel: w kilka sekund zrozumieć, **dlaczego rynek się rusza i w którą stronę pchają go newsy** —
+z liczbą, uzasadnieniem i uczciwą historią trafności. To wsparcie decyzji, nie automatyczny sygnał.
+
+**Pipeline**
+
+```
+newsy + GDELT + kalendarz ─▶ deduplikacja ─▶ klastry zdarzeń ─▶ klasyfikacja (Claude) ─▶ agregacja (kod)
+  (co 1–15 min)                              (embeddingi)        JSON wg schematu          nastawienie −1…+1
+                                                                                          per aktywo i horyzont
+```
+
+1. **Zbieranie:** API newsów, RSS agencji i banków centralnych, GDELT 2.0 (aktualizacja co 15 min, geolokalizacja), kalendarz makro.
+2. **Klastrowanie:** artykuły o tej samej sprawie łączone w jedno zdarzenie (model embeddingów + identyfikatory GDELT).
+   Klasyfikujemy **klastry, nie artykuły** — o rząd wielkości mniej wywołań AI.
+3. **Klasyfikacja (Claude, structured output):**
+   ```
+   {event_type, location{lat,lon}, entities[],
+    channels[]: safe_haven | real_yields | usd | inflation_expectations |
+                central_bank_demand | physical_demand | supply | industrial_demand,
+    impact: {XAU: {direction: -1|0|1, magnitude: 1-5, horizon: intraday|days|weeks},
+             XAG: {...}},
+    novelty: new | developing | already_known,
+    confidence: 0-1,
+    evidence: [{quote, source_url}]}
+   ```
+   Kanały są wyjaśnialne: „eskalacja → popyt na bezpieczną przystań”, „jastrzębi Fed → wyższe realne
+   rentowności → wyższy koszt trzymania złota”, „strajk w kopalni → mniejsza podaż srebra”.
+4. **Agregacja (kod, nie AI):** nastawienie = Σ kierunek × siła × nowość × wiarygodność źródła × zanik w czasie,
+   znormalizowane do −1…+1, osobno dla XAU i XAG i dla horyzontów (intraday, 1–5 dni, tygodnie).
+5. **Kontekst rynkowy (kod):** reakcja ceny od publikacji (jeśli złoto już wzrosło 2%, news jest w cenie),
+   realne rentowności, DXY, COT, przepływy ETF, GSR, zmienność.
+6. **Wynik w UI:** wartość −1…+1 z etykietą (long / neutralnie / short, siła), 3 główne czynniki, kontrargumenty,
+   „co zmieniłoby ocenę”, analogie historyczne, **trafność historyczna obok każdej oceny**.
+
+**Weryfikacja — najważniejsza część**
+
+- **Point-in-time:** każde nastawienie zapisywane (append-only) z czasem, **zanim** znany jest wynik.
+  Ceny liczone od momentu publikacji + opóźnienia przetwarzania. Bez artykułów edytowanych po fakcie.
+- **Metryki:** trafność kierunku, średni zwrot po 1 h / 1 d / 5 d per przedział nastawienia, kalibracja
+  (czy +0,6 daje więcej niż +0,3), korelacja rang (IC), t-stat; zawsze w porównaniu z prostymi
+  punktami odniesienia: „zawsze long złoto”, momentum 20 dni, losowe nastawienie.
+- **Historia:** GDELT i archiwa newsów od ~2015 sklasyfikowane przez Batch API → event studies i walk-forward
+  (ta sama metodologia co `backtest.py` w bocie).
+- **Tryb „shadow” od fazy 1:** pipeline działa i loguje oceny miesiącami, zanim cokolwiek zobaczy użytkownik.
+- **Próg pokazania etykiet LONG/SHORT:** t ≥ 2 poza próbą, ≥ 12 miesięcy, ≥ 200 obserwacji.
+  Wcześniej UI pokazuje „nastawienie newsów” z trafnością i dopiskiem, że to jeszcze nieistotne statystycznie
+  (tak jak w makiecie).
+- **Publiczna strona track recordu**, liczona automatycznie, z wynikami złymi i dobrymi.
+
+**Realistyczne oczekiwania:** sentyment newsów dla złota to słaby i niestabilny predyktor — wiele ruchów
+wynika z realnych rentowności i dolara, a nie z nagłówków. Największa wartość tej funkcji to **szybkie
+zrozumienie sytuacji i kontekst do własnych decyzji**, nie automatyczny handel. Bot może używać
+nastawienia jako filtra tylko wtedy, gdy backtest pokaże, że to pomaga.
+
+**Koszt:** klastry zamiast artykułów, stały prompt z taksonomią w cache (prompt caching), historia przez
+Batch API (~50% taniej), effort dobrany pomiarem per zadanie.
 
 ---
 
@@ -385,6 +485,10 @@ Kreator pliku: upload → podgląd mapowania (kolumny z pewnością AI) → rapo
 **Terminal:** linia poleceń na górze, siatka dokowalnych paneli, pasek statusu na dole
 (połączenie, opóźnienie danych, czas UTC i lokalny).
 
+**Globus:** kula z kropkowanych lądów na środku, filtry warstw nad nią, legenda i obrót w rogach.
+Prawa kolumna: nastawienie newsów dla XAU i XAG (poziomy pasek −1…+1 od środka), 3 główne czynniki,
+trafność historyczna z t-statem, lista zdarzeń, szczegóły wybranego zdarzenia.
+
 ### 5.5 Wykresy
 
 - Cena: świece, bez siatki pionowej, crosshair z wartościami w nagłówku panelu zamiast tooltipa.
@@ -410,6 +514,7 @@ Wybór pod: **jedną osobę na start, dane finansowe, real-time, integracje w Py
 | Wykresy analityczne | **uPlot** | Najszybsza biblioteka do serii czasowych, bardzo mała. |
 | Panele terminala | **dockview** | Dokowanie, zakładki, zapisywanie układów. |
 | Command palette | **cmdk** | |
+| Globus 3D | **globe.gl** (three.js) → **deck.gl** przy dużej skali; **MapLibre GL JS** dla trybu 2D | Sekcja 2.5. |
 | Stan UI | **Zustand** | Tylko stan lokalny; dane serwerowe w TanStack Query. |
 | Formularze | **React Hook Form + Zod** | Schematy Zod współdzielone z walidacją typów z API. |
 | Klient API | Typy generowane z OpenAPI FastAPI (`openapi-typescript`) | Jeden kontrakt, zero ręcznych typów. |
@@ -458,7 +563,15 @@ Mniejsza i lżejsza niż Electron.
 
 | Rynek | Źródło | Uwagi |
 |-------|--------|-------|
-| Crypto | Websockety giełd (darmowe) | Start terminala od crypto — zero kosztów licencji. |
+| **Metale spot (XAU, XAG)** | Dostawca danych FX/metali z licencją na wyświetlanie | Główny rynek produktu. Negocjować przed fazą 3. |
+| **Futures COMEX (GC, SI)** | Licencja CME przez dostawcę (np. Databento) | Real-time drogi; na start opóźnione 10 min. |
+| **LBMA (fixing złota i srebra)** | ICE Benchmark Administration / LBMA | Redystrybucja wymaga licencji — sprawdzić przed pokazaniem. |
+| **COT** | CFTC (publiczne, tygodniowe) | Darmowe. |
+| **Zasoby ETF (GLD, SLV)** | Strony emitentów | Dzienne. |
+| **Realne rentowności, stopy** | FRED / US Treasury (publiczne) | Darmowe. |
+| **DXY** | ICE (licencja) | Alternatywa: własny indeks dolara liczony z kursów FX. |
+| **Zdarzenia na globus** | GDELT 2.0, ACLED, USGS, GDACS, newsy | Sekcja 2.5; ACLED komercyjnie płatny. |
+| Crypto | Websockety giełd (darmowe) | Dodatkowy rynek — zero kosztów licencji. |
 | Akcje US, ETF | Dostawca z licencją na wyświetlanie (np. Databento, Polygon.io, Twelve Data) | Cena rośnie z liczbą użytkowników. **Negocjować licencję „display” przed startem.** |
 | GPW | Licencja GPW na dane real-time; na start dane opóźnione lub EOD | Koszt i formalności — faza późniejsza. |
 | FX i kursy do przeliczeń | ECB, **NBP** (API publiczne) | NBP wymagany do PIT. |
@@ -563,6 +676,12 @@ To produkt z kluczami do pieniędzy użytkowników — jeden wyciek kończy firm
 - **Journal i portfolio** — narzędzie analityczne danych użytkownika. Najmniejsze ryzyko.
 - **Pre-trade check / AI** — analiza historii użytkownika bez rekomendacji. Sformułowania i UI muszą to jasno pokazywać. Granica z doradztwem inwestycyjnym (MiFID II / KNF) do oceny prawnej.
 - **Sygnały dla użytkowników** (jak z bota) — mogą być traktowane jako rekomendacje → poza produktem albo po analizie prawnej.
+- **Nastawienie newsów long/short (4.6)** — publicznie rozpowszechniana informacja sugerująca strategię
+  (np. „short złoto”) dla instrumentów finansowych (CFD, futures, ETF na złoto) może być
+  **rekomendacją inwestycyjną w rozumieniu MAR** (rozporządzenie 596/2014): obowiązki prezentacji
+  (metodologia, ujawnienie konfliktów interesów, historia ocen). Wersja spersonalizowana („zamknij swoją
+  pozycję”) zbliża się do doradztwa inwestycyjnego wymagającego licencji. Założenie produktu: ocena
+  generyczna, niespersonalizowana, z metodologią i track recordem — **opinia prawna przed publikacją**.
 - **Boty na kluczach użytkowników** — software wykonujący strategię użytkownika to co innego niż zarządzanie cudzymi środkami. Do oceny prawnej przed fazą 4, także pod kątem MiCA.
 - **Dane rynkowe** — licencje na wyświetlanie (display) i redystrybucję. Bez nich nie wolno pokazywać danych giełd tradycyjnych.
 - **RODO** — dane finansowe, DPA z dostawcami (hosting, Clerk, Anthropic, PostHog), eksport i usunięcie konta, hosting w UE.
@@ -582,7 +701,8 @@ To produkt z kluczami do pieniędzy użytkowników — jeden wyciek kończy firm
 |------------|---------------|
 | `backtest.py` (symulacja, metryki, t-stat, walk-forward) | Statystyki journala + silnik backtestu botów |
 | `analysis/market_scanner.py` (reżim, sesje, S/R, korelacje) | `market_context` transakcji + panele terminala |
-| `analysis/fear_greed.py`, `funding_rate.py`, `whale_alerts.py` | Kontekst i panele terminala |
+| `analysis/fear_greed.py`, `funding_rate.py`, `whale_alerts.py` | Kontekst i panele terminala (dla crypto) |
+| `analysis/news_monitor.py`, `news_sentiment.py` | Punkt startowy pipeline'u newsów (4.6) — do przepisania na klastry i structured output |
 | `analysis/economic_calendar.py`, `news_monitor.py` | Panel `ECO`, news w terminalu |
 | `fetchers/` | Punkt startowy konektorów danych rynkowych |
 | `tracking/position_tracker.py` | Referencja logiki SL/TP/PnL (silnik pozycji piszemy od nowa na `Decimal` i lotach) |
@@ -613,9 +733,9 @@ To produkt z kluczami do pieniędzy użytkowników — jeden wyciek kończy firm
 | Faza | Czas | Zakres | Kryterium przejścia dalej |
 |------|------|--------|---------------------------|
 | **0. Fundament** | 1–2 tyg. | Monorepo, CI, auth, Postgres + migracje, design system (tokeny, komponenty bazowe), szkielet SPA | — |
-| **1. Journal MVP** | 6–8 tyg. | Import: Binance, Bybit, IBKR Flex, XTB, uniwersalny CSV/XLSX z mapowaniem AI · silnik pozycji · dashboard, lista, szczegóły transakcji · playbooki i tagi · AI weekly review · Paddle | Beta 20–50 osób: ≥ 30% aktywnych co tydzień, ≥ 5 płacących |
-| **2. Portfolio + PL** | 6–8 tyg. | Portfolio analyser · PIT-38 · mBank, Bossa, Degiro, Trading 212, MT4/5 (EA + statement), cTrader · czat „ask your trades” · reguły prop firm | Retencja M1 ≥ 40%, konwersja free→pro ≥ 4% |
-| **3. Terminal** | 8–10 tyg. | Linia poleceń, workspace'y, crypto real-time, news, makro, alerty · Tauri desktop · akcje po podpisaniu licencji danych | Użycie terminala ≥ 3 dni w tygodniu u płacących |
+| **1. Journal MVP** | 6–8 tyg. | Import: XTB, MT5 (EA + statement), IBKR Flex, cTrader, uniwersalny CSV/XLSX z mapowaniem AI · silnik pozycji · dashboard, lista, szczegóły transakcji · playbooki i tagi · AI weekly review · Paddle · **pipeline newsów w trybie shadow** | Beta 20–50 osób: ≥ 30% aktywnych co tydzień, ≥ 5 płacących |
+| **2. Portfolio + PL** | 6–8 tyg. | Portfolio analyser · PIT-38 · mBank, Bossa, Degiro, Trading 212, MT4, Binance, Bybit · czat „ask your trades” · reguły prop firm | Retencja M1 ≥ 40%, konwersja free→pro ≥ 4% |
+| **3. Terminal + globus** | 8–10 tyg. | Linia poleceń, workspace'y, metale i FX real-time, COT, ETF, realne rentowności · **globus zdarzeń** · nastawienie newsów (z track recordem; etykiety long/short dopiero po progu z 4.6) · alerty · Tauri desktop | Użycie terminala ≥ 3 dni w tygodniu u płacących |
 | **4. Boty** | 10+ tyg. | Builder, backtest, paper, live z limitami · pentest · opinia prawna | Opinia prawna pozytywna, pentest bez krytycznych |
 
 **Zasada:** kolejna faza startuje dopiero po spełnieniu kryterium poprzedniej. Inaczej budujemy cztery
@@ -629,13 +749,15 @@ To produkt z kluczami do pieniędzy użytkowników — jeden wyciek kończy firm
 |--------|-----------|
 | Parsery brokerów się psują (zmiana formatu eksportu) | Testy na próbkach, monitoring odsetka błędów importu per źródło, szybki kanał zgłoszenia pliku |
 | Wyciek kluczy | Sekcja 9; read-only; KMS; brak kluczy withdraw nigdy |
-| Koszt danych rynkowych zjada marżę terminala | Start od crypto; licencje negocjowane przed fazą 3; terminal jako wyższy plan |
+| Koszt danych rynkowych zjada marżę terminala | Metale spot od dostawcy FX, futures opóźnione; licencje negocjowane przed fazą 3; terminal jako wyższy plan |
+| Nastawienie newsów nie ma przewagi | Tryb shadow od fazy 1, publiczny track record, próg przed etykietami long/short, funkcja pozycjonowana jako kontekst |
+| Licencje danych zdarzeń (ACLED) i benchmarków (LBMA, DXY) | GDELT jako główne źródło, własny indeks dolara, weryfikacja licencji przed fazą 3 |
 | AI podaje nieprawdziwe liczby | Walidacja liczb, eval set, AI nie liczy statystyk |
 | Za szeroki zakres dla jednej osoby | Twarde kryteria faz (sekcja 13) |
 | Regulacje (doradztwo, boty) | Opinia prawna przed fazami 2 (AI pre-trade) i 4 (boty) |
 
 **Otwarte pytania:**
 1. Nazwa i domena (Tape to nazwa robocza).
-2. Główny segment na start: crypto perps czy prop firmy (MT5)? Wpływa na kolejność importerów.
+2. ~~Główny segment~~ → **złoto i srebro**. Otwarte: CFD spot (XTB, MT5, prop firmy) czy futures (IBKR) jako pierwszy priorytet?
 3. Rozliczenie crypto w PIT-38 — w fazie 2 czy osobny, późniejszy moduł?
 4. Język: PL-first czy EN-first z PL jako drugim? (Rynek PL mały, ale PIT i brokerzy PL to wyróżnik.)
