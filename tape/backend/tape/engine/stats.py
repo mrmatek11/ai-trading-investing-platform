@@ -7,6 +7,7 @@ ma co najmniej MIN_SEGMENT transakcji i |t| ≥ 2 — tylko takie trafiają do w
 from __future__ import annotations
 
 import math
+from bisect import bisect_left
 from collections import defaultdict
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
@@ -107,10 +108,12 @@ def equity_curve(positions: Sequence[Position]) -> List[Dict[str, object]]:
 def after_loss_flags(positions: Sequence[Position]) -> Dict[int, bool]:
     """Czy pozycja została otwarta w ciągu 30 min po zamknięciu stratnej pozycji (sygnał „revenge”)."""
     done = closed(positions)
-    loss_closes = [p.closed_at for p in done if p.net_pnl < 0]
+    loss_closes = sorted(p.closed_at for p in done if p.net_pnl < 0)
     flags = {}
     for p in done:
-        flags[id(p)] = any(timedelta(0) <= p.opened_at - t <= AFTER_LOSS_WINDOW for t in loss_closes)
+        # pierwsza strata zamknięta nie wcześniej niż 30 min przed wejściem — O(log n) zamiast przeglądu wszystkich
+        i = bisect_left(loss_closes, p.opened_at - AFTER_LOSS_WINDOW)
+        flags[id(p)] = i < len(loss_closes) and loss_closes[i] <= p.opened_at
     return flags
 
 
@@ -127,8 +130,6 @@ def segments(positions: Sequence[Position], news_times: Optional[Sequence[dateti
         "after_loss": lambda p: "do 30 min po stracie" if after[id(p)] else "pozostałe",
     }
     if news_times:
-        from bisect import bisect_left
-
         def at_news(p: Position) -> str:
             i = bisect_left(news_times, p.opened_at - news_window)
             hit = i < len(news_times) and news_times[i] <= p.opened_at + news_window
@@ -136,14 +137,16 @@ def segments(positions: Sequence[Position], news_times: Optional[Sequence[dateti
 
         groupers["news_window"] = at_news
     out: List[Segment] = []
+    vals = [float(p.net_pnl) for p in done]
     for group, key_fn in groupers.items():
+        keys = [key_fn(p) for p in done]                  # klucz liczony raz na pozycję, nie raz na koszyk
         buckets: Dict[str, List[float]] = defaultdict(list)
-        for p in done:
-            buckets[key_fn(p)].append(float(p.net_pnl))
+        for k, v in zip(keys, vals):
+            buckets[k].append(v)
         if len(buckets) < 2:
             continue
         for key, xs in buckets.items():
-            rest = [float(p.net_pnl) for p in done if key_fn(p) != key]
+            rest = [v for k, v in zip(keys, vals) if k != key]
             t = _t_welch(xs, rest)
             out.append(Segment(
                 group=group, key=key, trades=len(xs), net_pnl=round(sum(xs), 2),

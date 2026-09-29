@@ -85,3 +85,42 @@ def test_drawdown_and_profit_factor():
     ])
     s = stats.summarize(ps)
     assert s.net_pnl == -50 and s.max_drawdown == -200 and s.profit_factor == 0.75
+
+
+def _brute_after_loss(positions):
+    done = stats.closed(positions)
+    losses = [p.closed_at for p in done if p.net_pnl < 0]
+    return {id(p): any(timedelta(0) <= p.opened_at - t <= stats.AFTER_LOSS_WINDOW for t in losses) for p in done}
+
+
+def test_after_loss_flags_match_brute_force_including_edges():
+    import random
+
+    random.seed(7)
+    t0 = datetime(2026, 3, 2, 8, tzinfo=timezone.utc)
+    fills, t = [], t0
+    for i in range(400):
+        t += timedelta(minutes=random.choice([0, 1, 29, 30, 31, 45, 90, 240]), seconds=random.choice([0, 1]))
+        close = t + timedelta(minutes=random.randint(1, 60))
+        px = D(2000 + random.randint(-30, 30))
+        out = px + D(random.randint(-5, 5))
+        fills += [Fill(f"o{i}", t, "XAUUSD", "buy", D("0.1"), px, D(100)),
+                  Fill(f"c{i}", close, "XAUUSD", "sell", D("0.1"), out, D(100))]
+        t = close
+    positions = build_positions(sorted(fills, key=lambda f: f.ts))
+    got = stats.after_loss_flags(positions)
+    assert got == _brute_after_loss(positions) and 0 < sum(got.values()) < len(got)
+
+
+def test_after_loss_window_edges_are_inclusive():
+    base = datetime(2026, 3, 2, 8, tzinfo=timezone.utc)
+    for gap, expected in [(timedelta(0), True), (timedelta(minutes=30), True), (timedelta(minutes=30, seconds=1), False)]:
+        loss_close = base + timedelta(minutes=5)
+        fills = [Fill("lo", base, "XAUUSD", "buy", D("0.1"), D(2000), D(100)),
+                 Fill("lc", loss_close, "XAUUSD", "sell", D("0.1"), D(1990), D(100)),
+                 Fill("eo", loss_close + gap, "XAUUSD", "sell", D("0.1"), D(1990), D(100)),
+                 Fill("ec", loss_close + gap + timedelta(minutes=10), "XAUUSD", "buy", D("0.1"), D(1985), D(100))]
+        positions = build_positions(fills)
+        entry = next(p for p in positions if p.direction == -1)
+        assert stats.after_loss_flags(positions)[id(entry)] is expected, gap
+        assert _brute_after_loss(positions)[id(entry)] is expected
