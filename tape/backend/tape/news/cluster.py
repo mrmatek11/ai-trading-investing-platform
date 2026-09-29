@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import timedelta
-from typing import FrozenSet, List, Sequence
+from typing import Dict, FrozenSet, List, Sequence, Set
 
 from .classify import Article
 
@@ -48,20 +49,47 @@ class Cluster:
 
 
 def cluster(articles: Sequence[Article]) -> List[Cluster]:
+    """Każdy artykuł (od najstarszego) trafia do klastra o najwyższym podobieństwie ≥ SIMILARITY albo tworzy nowy.
+
+    Wynik jest taki sam jak przy porównaniu z każdym klastrem, ale liczymy tylko to, co może wygrać:
+    - klaster, którego ostatni artykuł jest starszy niż WINDOW, już nigdy nie wróci do gry (artykuły idą po czasie);
+    - klaster bez wspólnego słowa ma podobieństwo 0, a wybór wymaga sim > 0 — pomijamy go (indeks słowo → klastry);
+    - identyczne zestawy słów w klastrze liczymy raz.
+    """
     clusters: List[Cluster] = []
+    last: List = []                                  # czas ostatniego artykułu w klastrze
+    uniq: List[set] = []                             # różne zestawy słów w klastrze
+    index: Dict[str, Set[int]] = defaultdict(set)    # słowo → aktywne klastry, które je zawierają
+    active: Set[int] = set()
     for art in sorted(articles, key=lambda a: a.published_at):
         tok = tokens(art.title)
+        expired = [i for i in active if art.published_at - last[i] > WINDOW]
+        for i in expired:
+            active.discard(i)
+            for sets in uniq[i]:
+                for w in sets:
+                    index[w].discard(i)
+        candidates = sorted(set().union(*(index[w] for w in tok if w in index))) if tok else []
         best, best_sim = None, 0.0
-        for c in clusters:
-            if art.published_at - max(a.published_at for a in c.articles) > WINDOW:
-                continue
-            # podobieństwo do najbliższego artykułu w klastrze (słownik całego klastra rośnie i rozmywa wynik)
-            sim = max(jaccard(tok, t) for t in c.token_sets)
+        for i in candidates:                         # kolejność tworzenia — przy remisie wygrywa starszy klaster
+            sim = max(jaccard(tok, t) for t in uniq[i])
             if sim > best_sim:
-                best, best_sim = c, sim
+                best, best_sim = i, sim
         if best is not None and best_sim >= SIMILARITY:
-            best.articles.append(art)
-            best.token_sets.append(tok)
+            c = clusters[best]
+            c.articles.append(art)
+            c.token_sets.append(tok)
+            last[best] = art.published_at
+            if tok not in uniq[best]:
+                uniq[best].add(tok)
+                for w in tok:
+                    index[w].add(best)
         else:
+            i = len(clusters)
             clusters.append(Cluster([art], [tok]))
+            last.append(art.published_at)
+            uniq.append({tok})
+            active.add(i)
+            for w in tok:
+                index[w].add(i)
     return clusters

@@ -143,3 +143,50 @@ def test_api_uses_stored_events_and_prices(tmp_path):
     csv = "timestamp,close\n2026-01-01 00:00:00,2600\n2026-01-01 01:00:00,2601.5\nbad,row\n"
     r = api.post("/api/prices", files={"file": ("p.csv", io.BytesIO(csv.encode()), "text/csv")}, data={"asset": "XAU"})
     assert r.json() == {"added": 2, "rows": 3}
+
+
+def _reference_cluster(articles):
+    """Pierwotny algorytm (porównanie z każdym klastrem) — wzorzec dla zoptymalizowanej wersji."""
+    from tape.news.cluster import SIMILARITY, WINDOW, Cluster, jaccard, tokens
+
+    clusters = []
+    for art in sorted(articles, key=lambda a: a.published_at):
+        tok = tokens(art.title)
+        best, best_sim = None, 0.0
+        for c in clusters:
+            if art.published_at - max(a.published_at for a in c.articles) > WINDOW:
+                continue
+            sim = max(jaccard(tok, t) for t in c.token_sets)
+            if sim > best_sim:
+                best, best_sim = c, sim
+        if best is not None and best_sim >= SIMILARITY:
+            best.articles.append(art)
+            best.token_sets.append(tok)
+        else:
+            clusters.append(Cluster([art], [tok]))
+    return clusters
+
+
+def test_cluster_matches_reference_algorithm():
+    import random
+    from datetime import datetime, timedelta, timezone
+
+    from tape.news.classify import Article
+    from tape.news.cluster import cluster
+
+    r = random.Random(11)
+    now = datetime(2026, 9, 29, tzinfo=timezone.utc)
+    vocab = [f"w{i}" for i in range(400)] + ["gold", "fed", "the", "a"]
+    stories = [(r.sample(vocab, 8), now - timedelta(hours=r.randint(0, 60))) for _ in range(60)]
+    arts = []
+    for i in range(600):
+        words, t0 = r.choice(stories)
+        words = words[:]
+        for _ in range(r.randint(0, 5)):
+            words[r.randrange(len(words))] = r.choice(vocab)
+        title = " ".join(words) if i % 50 else "the a of"           # także tytuły bez słów kluczowych
+        arts.append(Article(title=title, text="", url=f"https://s{r.randint(0, 30)}.example/{i}",
+                            published_at=t0 + timedelta(minutes=r.choice([0, 1, 720, 721, r.randint(0, 1500)]))))
+    got, want = cluster(arts), _reference_cluster(arts)
+    assert [[a.url for a in c.articles] for c in got] == [[a.url for a in c.articles] for c in want]
+    assert [c.id for c in got] == [c.id for c in want] and 20 < len(got) < 600

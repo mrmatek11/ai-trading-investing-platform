@@ -56,6 +56,12 @@ class Base(DeclarativeBase):
     pass
 
 
+def fill_id(source: str, book: str, external_id: str) -> str:
+    """Identyfikator fill-a w silniku pozycji. Klucz pozycji to hash pierwszego z nich — zmiana formatu
+    odpięłaby notatki z journala od transakcji, dlatego format jest tylko tutaj."""
+    return f"{source}:{book}:{external_id}" if book else f"{source}:{external_id}"
+
+
 class FillRow(Base):
     __tablename__ = "fills"
     __table_args__ = (UniqueConstraint("account", "source", "book", "external_id", name="uq_fill_identity"),)
@@ -78,8 +84,7 @@ class FillRow(Base):
     currency: Mapped[str] = mapped_column(String(8), default="USD")
 
     def to_fill(self) -> Fill:
-        prefix = f"{self.source}:{self.book}:" if self.book else f"{self.source}:"
-        return Fill(external_id=f"{prefix}{self.external_id}", ts=self.ts, symbol=self.symbol,
+        return Fill(external_id=fill_id(self.source, self.book, self.external_id), ts=self.ts, symbol=self.symbol,
                     side=self.side, qty=self.qty, price=self.price, contract_size=self.contract_size,
                     fee=self.fee, broker_pnl=self.broker_pnl, stop_loss=self.stop_loss, currency=self.currency)
 
@@ -187,7 +192,7 @@ def load_fills_by_book(session: Session, account: str = "default", book: Optiona
     """Fill-e pogrupowane po rachunku — pozycje liczymy osobno dla każdego (inaczej dwa konta by się znosiły).
 
     Czytamy same kolumny zamiast obiektów ORM: przy dziesiątkach tysięcy wykonań to ok. 3× szybciej,
-    a wynik jest taki sam jak z FillRow.to_fill()."""
+    a wynik jest taki sam jak z FillRow.to_fill() (ten sam fill_id)."""
     F = FillRow
     q = select(F.book, F.source, F.external_id, F.ts, F.symbol, F.side, F.qty, F.price, F.contract_size,
                F.fee, F.broker_pnl, F.stop_loss, F.currency).where(F.account == account)
@@ -195,8 +200,7 @@ def load_fills_by_book(session: Session, account: str = "default", book: Optiona
         q = q.where(F.book == book)
     out: Dict[str, List[Fill]] = {}
     for (b, source, ext, ts, symbol, side, qty, price, size, fee, pnl, sl, cur) in session.execute(q.order_by(F.ts, F.id)):
-        prefix = f"{source}:{b}:" if b else f"{source}:"
-        out.setdefault(b, []).append(Fill(external_id=f"{prefix}{ext}", ts=ts, symbol=symbol, side=side, qty=qty,
+        out.setdefault(b, []).append(Fill(external_id=fill_id(source, b, ext), ts=ts, symbol=symbol, side=side, qty=qty,
                                           price=price, contract_size=size, fee=fee, broker_pnl=pnl,
                                           stop_loss=sl, currency=cur))
     return out
