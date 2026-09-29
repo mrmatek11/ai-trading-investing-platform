@@ -13,6 +13,7 @@ research: [`../docs/RESEARCH.md`](../docs/RESEARCH.md).
 |--------|------|
 | Import XTB (zamknięte pozycje, XLSX/CSV) | ✅ czas Europe/Warsaw → UTC, SL, wielkość kontraktu z P/L brokera |
 | Import MetaTrader 5 (Deals, CSV/XLSX) | ✅ czas serwera → UTC (domyślnie UTC+2, do zmiany) |
+| Import IBKR Flex (XML) | ✅ futures GC/SI/MGC z mnożnikiem, prowizje, FIFO P/L brokera; bezpieczny parser XML; klient Flex Web Service |
 | Import dowolnego CSV z mapowaniem kolumn | ✅ kreator: heurystyka (bez AI) albo propozycja Claude, podgląd, zatwierdzenie |
 | Silnik pozycji | ✅ FIFO na `Decimal`, dokładki, częściowe zamknięcia, odwrócenia, R z initial SL |
 | Statystyki | ✅ PnL, win rate, PF, drawdown, t-stat, segmenty z testem istotności (w tym „po stracie”) |

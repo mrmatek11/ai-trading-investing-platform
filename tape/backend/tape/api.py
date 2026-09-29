@@ -170,7 +170,7 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
         data = await file.read()
         if len(data) > MAX_UPLOAD_BYTES:
             raise HTTPException(status_code=413, detail="Plik większy niż 10 MB")
-        if broker and broker not in BROKERS and broker != "generic":
+        if broker and broker not in BROKERS and broker not in ("generic", "ibkr"):
             raise HTTPException(status_code=400, detail=f"Nieznany broker: {broker}")
         parsed_mapping = None
         if mapping:

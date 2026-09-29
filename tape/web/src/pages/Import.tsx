@@ -7,12 +7,14 @@ const BROKERS = [
   { value: "auto", label: "Wykryj automatycznie" },
   { value: "xtb", label: "XTB · zamknięte pozycje (XLSX/CSV)" },
   { value: "mt5", label: "MetaTrader 5 · lista transakcji (Deals)" },
+  { value: "ibkr", label: "Interactive Brokers · raport Flex (XML)" },
   { value: "custom", label: "Inny broker — dopasuj kolumny" },
 ];
 
 const TZ_HINT: Record<string, string> = {
   xtb: "Europe/Warsaw",
   mt5: "Etc/GMT-2",
+  ibkr: "America/New_York",
 };
 
 export function ImportPage() {
@@ -59,10 +61,10 @@ export function ImportPage() {
       >
         <label className="flex flex-col gap-2 rounded-md border border-dashed border-[#34343a] p-6 text-center hover:border-muted">
           <span>{file ? file.name : "Wybierz plik z historią transakcji"}</span>
-          <span className="text-xs text-muted">CSV · XLSX — XTB, MetaTrader 5</span>
+          <span className="text-xs text-muted">CSV · XLSX · XML — XTB, MetaTrader 5, IBKR Flex</span>
           <input
             type="file"
-            accept=".csv,.xlsx,.xlsm,.txt"
+            accept=".csv,.xlsx,.xlsm,.txt,.xml"
             className="sr-only"
             onChange={(e) => {
               setFile(e.target.files?.[0] ?? null);
