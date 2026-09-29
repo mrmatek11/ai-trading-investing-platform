@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import { AiKeyCard } from "../components/AiKeyCard";
 
 export function SettingsPage() {
   const qc = useQueryClient();
@@ -24,6 +25,7 @@ export function SettingsPage() {
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-5 px-6 py-8">
       <h1 className="text-xl font-semibold tracking-tight">Ustawienia</h1>
+      <AiKeyCard />
       <form
         className="flex flex-col gap-4 rounded-md border border-line p-5"
         onSubmit={(e) => {

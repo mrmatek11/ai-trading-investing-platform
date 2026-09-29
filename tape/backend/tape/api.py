@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from . import journal
-from . import econ_calendar, market, prop_accounts, reports, service
+from . import ai_keys, econ_calendar, market, prop_accounts, reports, service
 from . import review as ai_review
 from . import sync as broker_sync
 from .auth import AuthError, Verifier, admin_subs, verifier_from_env
@@ -90,6 +90,11 @@ class PropAccountIn(PropRequest):
     name: str = Field(min_length=1, max_length=80)
 
 
+class AiKeyIn(BaseModel):
+    api_key: Optional[str] = Field(None, max_length=400)       # None = zostaw obecny klucz, zmień tylko model
+    model: str = Field("claude-opus-5-5", max_length=64)
+
+
 class SettingsIn(BaseModel):
     email: str = Field("", max_length=254, pattern=r"^$|^[^@\s]+@[^@\s]+\.[^@\s]+$")
     weekly_report: bool = True
@@ -117,11 +122,25 @@ def default_ai_client():
 
 
 def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Optional[Verifier] = None,
-               secret_box: Optional[SecretBox] = None, flex_fetch=None) -> FastAPI:
+               secret_box: Optional[SecretBox] = None, flex_fetch=None, ai_factory=None) -> FastAPI:
     Session = make_sessionmaker(database_url)
     with Session() as s:
         econ_calendar.ensure_seed(s)
     box = secret_box if secret_box is not None else SecretBox.from_env()
+    make_ai = ai_factory or ai_keys.default_factory
+
+    def ai_for(account: str):
+        """(klient, model, źródło): klucz użytkownika ma pierwszeństwo przed kluczem serwera."""
+        with Session() as s:
+            try:
+                own = ai_keys.load(s, box, account)
+            except Exception:  # uszkodzony/nieodszyfrowalny wpis → traktujemy jak brak klucza
+                own = None
+        if own:
+            return make_ai(own[0]), own[1], "user"
+        if ai is not None and not ai_keys.require_user_key():
+            return ai, ai_keys.DEFAULT_MODEL, "server"
+        return None, None, None
     ai = ai_client if ai_client is not None else default_ai_client()
     token = os.getenv("TAPE_API_TOKEN", "")
     verify = verifier if verifier is not None else verifier_from_env()
@@ -187,7 +206,7 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
         return {"status": "ok", "time": datetime.now(timezone.utc).isoformat()}
 
     @app.post("/api/imports/suggest")
-    async def suggest_mapping(file: UploadFile = File(...)):
+    async def suggest_mapping(file: UploadFile = File(...), account: str = Depends(current_account)):
         """Nagłówki, podgląd i propozycja mapowania kolumn dla nierozpoznanego pliku."""
         from .importers.base import read_rows
         from .importers.suggest import suggest
@@ -199,14 +218,15 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
         if not rows:
             raise HTTPException(status_code=400, detail="Nie znaleziono wierszy z danymi")
         headers = list(dict.fromkeys(k for r in rows[:50] for k in r))
+        client, model, _ = ai_for(account)
         try:
-            suggestion = suggest(headers, rows, ai)
+            suggestion = suggest(headers, rows, client, model or ai_keys.DEFAULT_MODEL)
         except Exception as exc:  # awaria AI → i tak zwracamy heurystykę
             suggestion = suggest(headers, rows, None)
             suggestion["notes"] = f"AI niedostępne ({type(exc).__name__}); propozycja z heurystyki."
         preview = [{h: (None if r.get(h) is None else str(r.get(h))) for h in headers} for r in rows[:8]]
         return {"headers": headers, "preview": preview, "rows": len(rows), "suggestion": suggestion,
-                "ai_available": ai is not None}
+                "ai_available": client is not None}
 
     @app.post("/api/imports")
     async def import_file(
@@ -448,13 +468,15 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
         facts, h, closed = review_inputs(account)
         with Session() as s:
             row = ai_review.latest(s, account)
-        return {"ai_available": ai is not None, "trades": closed, "min_trades": ai_review.MIN_TRADES,
+        client, _, source = ai_for(account)
+        return {"ai_available": client is not None, "ai_source": source, "trades": closed, "min_trades": ai_review.MIN_TRADES,
                 "review": ai_review.to_dict(row, facts, h) if row else None}
 
     @app.post("/api/review")
     def create_review(account: str = Depends(current_account)):
-        if ai is None:
-            raise HTTPException(status_code=503, detail="AI nie jest skonfigurowane (ANTHROPIC_API_KEY)")
+        client, model, _ = ai_for(account)
+        if client is None:
+            raise HTTPException(status_code=503, detail="Podłącz swój klucz AI w Ustawieniach")
         facts, h, closed = review_inputs(account)
         if closed < ai_review.MIN_TRADES:
             raise HTTPException(status_code=400, detail=f"Potrzeba co najmniej {ai_review.MIN_TRADES} zamkniętych transakcji")
@@ -466,13 +488,13 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
             if row and now - row.created_at < timedelta(minutes=5):
                 raise HTTPException(status_code=429, detail="Nowy przegląd możesz wygenerować za kilka minut")
         try:
-            out = ai_review.generate(ai, facts)
+            out = ai_review.generate(client, facts, model)
         except Exception as exc:  # błąd API/sieci — nie zapisujemy niczego
             raise HTTPException(status_code=502, detail=f"AI chwilowo niedostępne ({type(exc).__name__})") from exc
         if out is None:
             raise HTTPException(status_code=502, detail="AI nie przygotowało przeglądu — spróbuj ponownie później")
         with Session() as s:
-            row = ai_review.ReviewRow(account=account, facts_hash=h, model=ai_review.MODEL,
+            row = ai_review.ReviewRow(account=account, facts_hash=h, model=model,
                                       payload={**out, "facts_snapshot": facts})
             s.add(row)
             s.commit()
@@ -632,6 +654,50 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
             rep = broker_sync.ingest_mt5(s, conn, payload)
             s.commit()
             return rep
+
+    # ---- własny klucz AI ----
+
+    @app.get("/api/ai/settings")
+    def ai_settings(account: str = Depends(current_account)):
+        with Session() as s:
+            row = s.get(ai_keys.AiCredential, account)
+        return {"has_key": row is not None, "last4": row.last4 if row else None,
+                "model": row.model if row else ai_keys.DEFAULT_MODEL, "models": ai_keys.MODELS,
+                "server_key": ai is not None and not ai_keys.require_user_key(), "encryption": box is not None}
+
+    @app.put("/api/ai/key")
+    def save_ai_key(body: AiKeyIn, account: str = Depends(current_account)):
+        if box is None:
+            raise HTTPException(status_code=503, detail="Serwer nie ma klucza szyfrowania (TAPE_SECRET_KEYS) — "
+                                                        "nie zapiszemy klucza AI jawnym tekstem.")
+        with Session() as s:
+            existing = s.get(ai_keys.AiCredential, account)
+        if body.api_key is None and existing is None:
+            raise HTTPException(status_code=400, detail="Podaj klucz API")
+        try:
+            if body.model not in ai_keys.MODELS:
+                raise ai_keys.KeyError_(f"Nieobsługiwany model: {body.model}")
+            if body.api_key is not None:
+                key = ai_keys.check_format(body.api_key)
+            else:                                                       # zmiana samego modelu
+                with Session() as s:
+                    key = ai_keys.load(s, box, account)[0]
+            ai_keys.verify(make_ai(key), body.model)
+        except ai_keys.KeyError_ as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        with Session() as s:
+            row = ai_keys.save(s, box, account, key, body.model)
+            s.commit()
+            return {"ok": True, "last4": row.last4, "model": row.model}
+
+    @app.delete("/api/ai/key")
+    def delete_ai_key(account: str = Depends(current_account)):
+        with Session() as s:
+            row = s.get(ai_keys.AiCredential, account)
+            if row is not None:
+                s.delete(row)
+                s.commit()
+        return {"ok": True}
 
     # ---- ustawienia i raporty e-mail ----
 

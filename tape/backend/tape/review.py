@@ -146,10 +146,10 @@ def validate(out: ReviewOutput, facts: Sequence[Dict[str, str]]) -> Dict[str, ob
             "caveat": out.caveat, "dropped": dropped}
 
 
-def generate(client, facts: Sequence[Dict[str, str]]) -> Optional[Dict[str, object]]:
+def generate(client, facts: Sequence[Dict[str, str]], model: str = MODEL) -> Optional[Dict[str, object]]:
     listing = "\n".join(f"{f['id']}: {f['text']}" for f in facts)
     response = client.beta.messages.parse(
-        model=MODEL,
+        model=model,
         max_tokens=8000,
         betas=["server-side-fallback-2026-07-01"],
         fallbacks="default",

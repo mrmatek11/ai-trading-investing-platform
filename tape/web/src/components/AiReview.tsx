@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { api, type AiReview as Review, type ReviewFinding } from "../api";
 import { when } from "../format";
 
@@ -64,7 +65,11 @@ export function AiReview() {
           </button>
         )}
       </div>
-      {!ai_available && <p className="mt-2 text-muted">AI nie jest skonfigurowane na tym serwerze.</p>}
+      {!ai_available && (
+        <p className="mt-2 text-muted">
+          Podłącz swój klucz Claude w <Link to="/settings" className="text-fg underline">Ustawieniach</Link>, żeby włączyć przegląd.
+        </p>
+      )}
       {ai_available && !enough && (
         <p className="mt-2 text-muted">
           Przegląd będzie dostępny od {min_trades} zamkniętych transakcji (masz <span className="num">{trades}</span>).

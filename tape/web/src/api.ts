@@ -334,6 +334,8 @@ export type PropAccountStatus = {
   rules: { initial_balance: number; daily_loss_pct: number; max_drawdown_pct: number; drawdown_type: "static" | "trailing"; profit_target_pct: number | null; day_tz: string };
 };
 
+export type AiSettings = { has_key: boolean; last4: string | null; model: string; models: Record<string, string>; server_key: boolean; encryption: boolean };
+
 export type UserSettings = { email: string; weekly_report: boolean; prop_alerts: boolean; mail_configured: boolean };
 
 export type Book = { id: string; label: string; kind: "mt5_push" | "ibkr_flex" | "import"; has_trades: boolean };
@@ -354,6 +356,9 @@ export const api = {
   journalMeta: () => get<{ mistakes: string[] }>("/api/journal/meta"),
   setups: (book: string | null = null) => get<Setup[]>(`/api/setups${bq(book)}`),
   books: () => get<Book[]>("/api/books"),
+  aiSettings: () => get<AiSettings>("/api/ai/settings"),
+  saveAiKey: (body: { api_key?: string; model: string }) => send<{ ok: boolean; last4: string; model: string }>("PUT", "/api/ai/key", body),
+  deleteAiKey: () => send<{ ok: boolean }>("DELETE", "/api/ai/key"),
   settings: () => get<UserSettings>("/api/settings"),
   saveSettings: (body: Omit<UserSettings, "mail_configured">) => send<{ ok: boolean }>("PUT", "/api/settings", body),
   weeklyPreview: () => get<{ subject: string; html: string; text: string }>("/api/reports/weekly/preview"),

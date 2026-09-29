@@ -114,7 +114,7 @@ class CashFlowRow(Base):
 
 def import_models() -> None:
     """Zaimportuj wszystkie moduły z tabelami, żeby były w Base.metadata."""
-    from . import econ_calendar, journal, market, prop_accounts, reports, review, sync  # noqa: F401
+    from . import ai_keys, econ_calendar, journal, market, prop_accounts, reports, review, sync  # noqa: F401
     from .news import store  # noqa: F401
 
 

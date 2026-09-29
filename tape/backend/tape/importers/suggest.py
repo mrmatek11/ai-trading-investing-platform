@@ -61,7 +61,8 @@ def heuristic(headers: Sequence[str]) -> Dict[str, str]:
     return out
 
 
-def ai_suggest(client, headers: Sequence[str], rows: Sequence[Dict[str, object]]) -> Optional[MappingSuggestion]:
+def ai_suggest(client, headers: Sequence[str], rows: Sequence[Dict[str, object]],
+               model: str = MODEL) -> Optional[MappingSuggestion]:
     sample = "\n".join(" | ".join(str(r.get(norm_header(h), "")) for h in headers) for r in rows[:SAMPLE_ROWS])
     prompt = (
         "Plik z historią transakcji od brokera. Dopasuj kolumny do pól: id (unikalny identyfikator "
@@ -72,7 +73,7 @@ def ai_suggest(client, headers: Sequence[str], rows: Sequence[Dict[str, object]]
         f"Nagłówki:\n{' | '.join(headers)}\n\nPróbka:\n{sample}"
     )
     response = client.beta.messages.parse(
-        model=MODEL,
+        model=model,
         max_tokens=3000,
         betas=["server-side-fallback-2026-07-01"],
         fallbacks="default",
@@ -85,7 +86,7 @@ def ai_suggest(client, headers: Sequence[str], rows: Sequence[Dict[str, object]]
     return response.parsed_output
 
 
-def suggest(headers: Sequence[str], rows: Sequence[Dict[str, object]], client=None) -> Dict[str, object]:
+def suggest(headers: Sequence[str], rows: Sequence[Dict[str, object]], client=None, model: str = MODEL) -> Dict[str, object]:
     columns = heuristic(headers)
     result = {"columns": columns, "source": "heuristic", "tz": "UTC", "date_format": None,
               "buy_values": None, "sell_values": None, "confidence": {k: 0.85 for k in columns}, "notes": ""}
@@ -93,7 +94,7 @@ def suggest(headers: Sequence[str], rows: Sequence[Dict[str, object]], client=No
     if client is None or not missing:
         result["missing"] = missing
         return result
-    ai = ai_suggest(client, headers, rows)
+    ai = ai_suggest(client, headers, rows, model)
     if ai is None:
         result["missing"] = missing
         return result
