@@ -14,7 +14,7 @@ from sqlalchemy import (JSON, DateTime, Integer, Numeric, String, TypeDecorator,
                         create_engine, select)
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
-from .importers.base import Fill
+from .importers.base import CashFlow, Fill
 
 
 class ExactDecimal(TypeDecorator):
@@ -94,6 +94,20 @@ class ImportRow(Base):
     errors: Mapped[list] = mapped_column(JSON, default=list)
 
 
+class CashFlowRow(Base):
+    __tablename__ = "cash_flows"
+    __table_args__ = (UniqueConstraint("account", "source", "external_id", name="uq_cash_flow_identity"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    account: Mapped[str] = mapped_column(String(64), index=True)
+    source: Mapped[str] = mapped_column(String(32))          # mt5 | ibkr | manual
+    external_id: Mapped[str] = mapped_column(String(128))
+    ts: Mapped[datetime] = mapped_column(UtcDateTime, index=True)
+    amount: Mapped[Decimal] = mapped_column(ExactDecimal)
+    currency: Mapped[str] = mapped_column(String(8), default="USD")
+    note: Mapped[str] = mapped_column(String(200), default="")
+
+
 def make_sessionmaker(url: str | None = None) -> sessionmaker:
     url = url or os.getenv("DATABASE_URL", "sqlite:///tape.db")
     kwargs = {"connect_args": {"check_same_thread": False}} if url.startswith("sqlite") else {}
@@ -123,6 +137,25 @@ def store_fills(session: Session, account: str, source: str, fills: Iterable[Fil
                             stop_loss=f.stop_loss, currency=f.currency))
         new += 1
     return new, len(fills) - new
+
+
+def store_cash_flows(session: Session, account: str, source: str, flows: Iterable[CashFlow]) -> int:
+    existing = set(session.scalars(
+        select(CashFlowRow.external_id).where(CashFlowRow.account == account, CashFlowRow.source == source)
+    ))
+    n = 0
+    for f in flows:
+        if f.external_id in existing:
+            continue
+        existing.add(f.external_id)
+        session.add(CashFlowRow(account=account, source=source, external_id=f.external_id, ts=f.ts,
+                                amount=f.amount, currency=f.currency, note=f.note[:200]))
+        n += 1
+    return n
+
+
+def load_cash_flows(session: Session, account: str) -> List[CashFlowRow]:
+    return list(session.scalars(select(CashFlowRow).where(CashFlowRow.account == account).order_by(CashFlowRow.ts)))
 
 
 def load_fills(session: Session, account: str = "default") -> List[Fill]:

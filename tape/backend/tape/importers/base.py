@@ -29,11 +29,23 @@ class Fill:
     currency: str = "USD"
 
 
+@dataclass(frozen=True)
+class CashFlow:
+    """Wpłata (+) lub wypłata (−) — potrzebna do stóp zwrotu ważonych czasem."""
+
+    external_id: str
+    ts: datetime                      # UTC
+    amount: Decimal
+    currency: str = "USD"
+    note: str = ""
+
+
 @dataclass
 class ImportResult:
     fills: List[Fill] = field(default_factory=list)
     errors: List[str] = field(default_factory=list)
     detected: str = ""
+    cash_flows: List[CashFlow] = field(default_factory=list)
 
 
 class ImportErrorWithRow(ValueError):

@@ -26,9 +26,9 @@ from pydantic import BaseModel, Field
 from sqlalchemy import Integer, String, Text, select
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
-from .db import Base, UtcDateTime, store_fills
+from .db import Base, UtcDateTime, store_cash_flows, store_fills
 from .importers import ibkr
-from .importers.base import Fill
+from .importers.base import CashFlow, Fill
 from .importers.instruments import default_contract_size, normalize_symbol
 from .secretbox import SecretBox, SecretError
 
@@ -115,6 +115,7 @@ def sync_ibkr(session: Session, conn: Connection, box: Optional[SecretBox], fetc
         if not result.fills and result.errors:
             raise ValueError(result.errors[0])
         new, dup = store_fills(session, conn.account, "ibkr", result.fills)
+        store_cash_flows(session, conn.account, "ibkr", result.cash_flows)
         _finish(conn, now, new, "; ".join(result.errors[:3]))
         if result.errors:
             conn.last_status = "partial"
@@ -149,11 +150,16 @@ class Mt5Payload(BaseModel):
     deals: List[Mt5Deal] = Field(default_factory=list, max_length=5000)
 
 
-def mt5_fills(payload: Mt5Payload) -> tuple[List[Fill], List[str]]:
+def mt5_fills(payload: Mt5Payload) -> tuple[List[Fill], List[str], List[CashFlow]]:
     fills: List[Fill] = []
     errors: List[str] = []
+    flows: List[CashFlow] = []
     for d in payload.deals:
         kind = d.type.strip().lower()
+        if kind == "balance" and d.profit:
+            flows.append(CashFlow(str(d.ticket), datetime.fromtimestamp(d.time - payload.gmt_offset, tz=timezone.utc),
+                                  d.profit, note="MT5 balance"))
+            continue
         if kind not in ("buy", "sell"):
             continue                              # wpłaty, wypłaty, korekty — nie są transakcjami
         if not d.symbol or d.volume <= 0 or d.price <= 0:
@@ -170,7 +176,7 @@ def mt5_fills(payload: Mt5Payload) -> tuple[List[Fill], List[str]]:
             broker_pnl=d.profit if closing else None,
             stop_loss=d.sl if d.sl else None,
         ))
-    return fills, errors
+    return fills, errors, flows
 
 
 def connection_for_token(session: Session, token: str) -> Optional[Connection]:
@@ -181,8 +187,9 @@ def connection_for_token(session: Session, token: str) -> Optional[Connection]:
 
 
 def ingest_mt5(session: Session, conn: Connection, payload: Mt5Payload, now: Optional[datetime] = None) -> dict:
-    fills, errors = mt5_fills(payload)
+    fills, errors, flows = mt5_fills(payload)
     new, dup = store_fills(session, conn.account, "mt5", fills)
+    store_cash_flows(session, conn.account, "mt5", flows)
     _finish(conn, now or datetime.now(timezone.utc), new, "; ".join(errors[:3]))
     if errors:
         conn.last_status = "partial"

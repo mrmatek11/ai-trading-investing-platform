@@ -187,6 +187,32 @@ export type PropResponse = {
   note: string;
 };
 
+export type CashFlowItem = { id: number; ts: string; amount: number; currency: string; note: string; source: string };
+
+export type Portfolio = {
+  note: string;
+  balance: number | null;
+  realized: number;
+  deposits: number;
+  twr: number | null;
+  ytd: number | null;
+  currencies: string[];
+  exposure: Record<"XAU" | "XAG", { ounces: number; price: number | null; notional: number | null; price_ts: string | null }>;
+  holdings: {
+    key: string;
+    symbol: string;
+    metal: "XAU" | "XAG" | null;
+    direction: "long" | "short";
+    qty: string;
+    avg_price: string;
+    ounces: number | null;
+    mark: number | null;
+    unrealized: number | null;
+  }[];
+  months: { month: string; pnl: number; flows: number; start_equity: number; end_equity: number; ret: number | null }[];
+  cash_flows: CashFlowItem[];
+};
+
 export type Connection = {
   id: string;
   kind: "ibkr_flex" | "mt5_push";
@@ -258,6 +284,10 @@ export const api = {
   createSetup: (body: SetupInput) => send<{ id: number }>("POST", "/api/setups", body),
   updateSetup: (id: number, body: SetupInput) => send<{ ok: boolean }>("PUT", `/api/setups/${id}`, body),
   deleteSetup: (id: number) => send<{ ok: boolean }>("DELETE", `/api/setups/${id}`),
+  portfolio: () => get<Portfolio>("/api/portfolio"),
+  addCashFlow: (body: { ts: string; amount: number; currency: string; note: string }) =>
+    send<CashFlowItem>("POST", "/api/cashflows", body),
+  deleteCashFlow: (id: number) => send<{ ok: boolean }>("DELETE", `/api/cashflows/${id}`),
   connections: () => get<{ connections: Connection[]; encryption: boolean }>("/api/connections"),
   addIbkr: (body: { label: string; token: string; query_id: string; tz: string }) =>
     send<Connection>("POST", "/api/connections/ibkr", body),

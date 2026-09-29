@@ -29,6 +29,16 @@ const NAV: { to: string; label: string; icon: ReactNode }[] = [
     ),
   },
   {
+    to: "/portfolio",
+    label: "Portfel",
+    icon: (
+      <>
+        <path d="M12 3a9 9 0 1 0 9 9h-9z" />
+        <path d="M15 3.5A9 9 0 0 1 20.5 9H15z" />
+      </>
+    ),
+  },
+  {
     to: "/globe",
     label: "Globus",
     icon: (
@@ -74,6 +84,9 @@ const COMMANDS: Record<string, string> = {
   CALC: "/risk",
   PROP: "/risk",
   SYNC: "/connections",
+  PORT: "/portfolio",
+  PORTFOLIO: "/portfolio",
+  PF: "/portfolio",
   CONNECT: "/connections",
 };
 
@@ -120,7 +133,7 @@ export function Shell() {
       setCmd("");
       navigate({ to: target });
     } else if (cmd.trim()) {
-      setError("Nieznane polecenie. Spróbuj: GLOBE, JRNL, TRADES, PLAYBOOK, RISK, IMPORT, SYNC");
+      setError("Nieznane polecenie. Spróbuj: GLOBE, JRNL, PORT, TRADES, PLAYBOOK, RISK, IMPORT, SYNC");
     }
   };
 
@@ -181,7 +194,7 @@ export function Shell() {
                 setCmd(e.target.value);
                 setError("");
               }}
-              placeholder="Polecenie: GLOBE, JRNL, TRADES, PLAYBOOK, RISK, IMPORT, SYNC"
+              placeholder="Polecenie: GLOBE, PORT, JRNL, TRADES, RISK, SYNC…"
               className="num flex-1 bg-transparent text-[13px] text-fg outline-none placeholder:text-muted"
               autoComplete="off"
             />

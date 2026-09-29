@@ -96,6 +96,11 @@ def price_series(session: Session, asset: str) -> List[tuple]:
     return [(r.ts, r.price) for r in session.scalars(select(PriceRow).where(PriceRow.asset == asset).order_by(PriceRow.ts))]
 
 
+def latest_price(session: Session, asset: str):
+    row = session.scalars(select(PriceRow).where(PriceRow.asset == asset).order_by(PriceRow.ts.desc()).limit(1)).first()
+    return (row.ts, row.price) if row else None
+
+
 def add_prices(session: Session, asset: str, rows) -> int:
     """Dopisz ceny (ts, price); istniejące znaczniki czasu są pomijane."""
     existing = set(session.scalars(select(PriceRow.ts).where(PriceRow.asset == asset)))

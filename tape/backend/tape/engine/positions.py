@@ -46,6 +46,7 @@ class Position:
     broker_pnl: Decimal = ZERO
     broker_pnl_complete: bool = True
     initial_stop: Optional[Decimal] = None
+    open_value: Decimal = ZERO        # Σ qty × cena lotów jeszcze otwartych (FIFO) — dla portfela
     fill_ids: List[str] = field(default_factory=list)
 
     @property
@@ -57,6 +58,15 @@ class Position:
     @property
     def is_open(self) -> bool:
         return self.closed_at is None
+
+    @property
+    def open_qty(self) -> Decimal:
+        return self.opened_qty - self.closed_qty
+
+    @property
+    def avg_open_price(self) -> Optional[Decimal]:
+        """Średnia cena lotów, które zostały otwarte (FIFO) — różni się od avg_entry po częściowych zamknięciach."""
+        return self.open_value / self.open_qty if self.open_qty else None
 
     @property
     def avg_entry(self) -> Decimal:
@@ -153,5 +163,7 @@ def build_positions(fills: Iterable[Fill]) -> List[Position]:
                     first_touch = False
                 if current.closed_at is not None:
                     current = None
+        if current is not None:
+            current.open_value = sum((l.qty * l.price for l in lots), ZERO)
     positions.sort(key=lambda p: p.opened_at)
     return positions

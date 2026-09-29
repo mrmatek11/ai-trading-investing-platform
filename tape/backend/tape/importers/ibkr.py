@@ -21,7 +21,7 @@ from xml.etree.ElementTree import ParseError
 from defusedxml import ElementTree  # plik od użytkownika: blokuje encje (XXE, „billion laughs”)
 from defusedxml.common import DefusedXmlException
 
-from .base import Fill, ImportResult, to_decimal, to_utc
+from .base import CashFlow, Fill, ImportResult, to_decimal, to_utc
 from .instruments import normalize_symbol
 
 NAME = "ibkr"
@@ -60,7 +60,22 @@ def parse(data: bytes, filename: str = "", tz: str = "America/New_York") -> Impo
     except (ParseError, DefusedXmlException) as exc:
         result.errors.append(f"Niepoprawny lub niebezpieczny XML: {type(exc).__name__}")
         return result
+    for c in root.findall(".//CashTransactions/CashTransaction"):
+        if (c.get("type") or "") != "Deposits/Withdrawals" or (c.get("levelOfDetail") or "DETAIL").upper() == "SUMMARY":
+            continue
+        try:
+            when = c.get("dateTime") or c.get("settleDate") or c.get("reportDate") or ""
+            if len(when) == 8:
+                when += ";000000"
+            result.cash_flows.append(CashFlow(
+                str(c.get("transactionID") or c.get("tradeID") or f"{when}:{c.get('amount')}"),
+                _time(when, tz), to_decimal(c.get("amount")), c.get("currency") or "USD",
+                (c.get("description") or "")[:200]))
+        except (ValueError, TypeError) as exc:
+            result.errors.append(f"wpłata/wypłata: {exc}")
     trades = root.findall(".//Trades/Trade")
+    if not trades and result.cash_flows:
+        return result
     if not trades:
         result.errors.append("Brak sekcji <Trades> w raporcie Flex — dodaj ją w definicji zapytania.")
         return result

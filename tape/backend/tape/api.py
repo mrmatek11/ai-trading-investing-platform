@@ -12,6 +12,7 @@ from __future__ import annotations
 import hmac
 import json
 import os
+import uuid
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Optional
@@ -23,8 +24,8 @@ from sqlalchemy import select
 from . import journal
 from . import sync as broker_sync
 from .auth import AuthError, Verifier, admin_subs, verifier_from_env
-from .db import ImportRow, load_fills, make_sessionmaker, store_fills
-from .engine import prop, risk, stats
+from .db import CashFlowRow, ImportRow, load_cash_flows, load_fills, make_sessionmaker, store_cash_flows, store_fills
+from .engine import portfolio, prop, risk, stats
 from .engine.positions import build_positions
 from .importers import BROKERS, generic, parse_file
 from .news import store as news_store
@@ -71,6 +72,13 @@ class PropRequest(BaseModel):
     drawdown_type: str = Field("static", pattern="^(static|trailing)$")
     profit_target_pct: Decimal | None = Field(Decimal(10), gt=0)
     day_tz: str = "Europe/Prague"
+
+
+class CashFlowIn(BaseModel):
+    ts: datetime
+    amount: Decimal = Field(gt=Decimal("-1e12"), lt=Decimal("1e12"))
+    currency: str = Field("USD", pattern="^[A-Z]{3}$")
+    note: str = Field("", max_length=200)
 
 
 class IbkrConnectionIn(BaseModel):
@@ -201,10 +209,11 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
         source = result.detected or (broker or "unknown")
         with Session() as s:
             new, dup = store_fills(s, account, source, result.fills) if result.fills else (0, 0)
+            flows_new = store_cash_flows(s, account, source, result.cash_flows)
             s.add(ImportRow(account=account, source=source, filename=file.filename or "", new=new,
                             duplicates=dup, errors=result.errors[:200]))
             s.commit()
-        return {"detected": result.detected or None, "fills": len(result.fills), "new": new,
+        return {"detected": result.detected or None, "fills": len(result.fills), "new": new, "cash_flows": flows_new,
                 "duplicates": dup, "errors": result.errors[:50], "error_count": len(result.errors)}
 
     @app.get("/api/positions")
@@ -363,6 +372,70 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
                                    "passed_day": v.passed_day.isoformat() if v.passed_day else None}
                                for k, v in sims.items()},
                 "note": "Liczone na saldzie po zamknięciu transakcji; firmy liczą też equity z otwartymi pozycjami."}
+
+    # ---- portfel ----
+
+    def flow_dict(f: CashFlowRow):
+        return {"id": f.id, "ts": f.ts.isoformat(), "amount": float(f.amount), "currency": f.currency,
+                "note": f.note, "source": f.source}
+
+    @app.get("/api/portfolio")
+    def get_portfolio(account: str = Depends(current_account)):
+        items = positions_for(account)
+        with Session() as s:
+            rows = load_cash_flows(s, account)
+            marks = {a: m for a in ("XAU", "XAG") if (m := news_store.latest_price(s, a))}
+        flows = [portfolio.Flow(f.ts, f.amount) for f in rows]
+        rep = portfolio.report(items, flows, marks)
+        f = lambda d: None if d is None else float(round(d, 2))  # noqa: E731
+        first_trade = min((p.opened_at for p in items), default=None)
+        if not rows:
+            note = "Dodaj wpłatę początkową, żeby policzyć stopy zwrotu (bez kapitału liczymy tylko wynik kwotowo)."
+        elif first_trade and first_trade < rows[0].ts:
+            note = "Pierwsza transakcja jest wcześniejsza niż pierwsza wpłata — dodaj saldo początkowe z wcześniejszą datą."
+        else:
+            note = ""
+        return {
+            "note": note,
+            "balance": f(rep.balance), "realized": f(rep.realized), "deposits": f(rep.deposits),
+            "twr": rep.twr, "ytd": rep.ytd,
+            "currencies": sorted({r.currency for r in rows}),
+            "exposure": {k: {"ounces": float(e.ounces), "price": e.price, "notional": f(e.notional),
+                             "price_ts": e.price_ts.isoformat() if e.price_ts else None}
+                         for k, e in rep.exposure.items()},
+            "holdings": [{"key": h.key, "symbol": h.symbol, "metal": h.metal,
+                          "direction": "long" if h.direction == 1 else "short", "qty": str(h.qty),
+                          "avg_price": str(round(h.avg_price, 5)), "ounces": f(h.ounces), "mark": h.mark,
+                          "unrealized": f(h.unrealized)} for h in rep.holdings],
+            "months": [{"month": m.month, "pnl": f(m.pnl), "flows": f(m.flows), "start_equity": f(m.start_equity),
+                        "end_equity": f(m.end_equity), "ret": m.ret} for m in rep.months],
+            "cash_flows": [flow_dict(x) for x in rows][-200:],
+        }
+
+    @app.post("/api/cashflows", status_code=201)
+    def add_cash_flow(body: CashFlowIn, account: str = Depends(current_account)):
+        if body.amount == 0:
+            raise HTTPException(status_code=422, detail="Kwota nie może być zerowa")
+        ts = body.ts if body.ts.tzinfo else body.ts.replace(tzinfo=timezone.utc)
+        with Session() as s:
+            row = CashFlowRow(account=account, source="manual", external_id=uuid.uuid4().hex, ts=ts,
+                              amount=body.amount, currency=body.currency, note=body.note)
+            s.add(row)
+            s.commit()
+            return flow_dict(row)
+
+    @app.delete("/api/cashflows/{flow_id}")
+    def delete_cash_flow(flow_id: int, account: str = Depends(current_account)):
+        with Session() as s:
+            row = s.get(CashFlowRow, flow_id)
+            if row is None or row.account != account:
+                raise HTTPException(status_code=404, detail="Nie ma takiej operacji")
+            if row.source != "manual":
+                raise HTTPException(status_code=400, detail="Operacje z brokera wracają przy synchronizacji — "
+                                                            "usuń je u źródła")
+            s.delete(row)
+            s.commit()
+        return {"ok": True}
 
     # ---- połączenia z brokerami (automatyczna synchronizacja) ----
 

@@ -10,7 +10,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Dict, List
 
-from .base import Fill, ImportResult, has_columns, iter_with_errors, pick, read_rows, require, to_decimal, to_utc
+from .base import CashFlow, Fill, ImportResult, has_columns, iter_with_errors, pick, read_rows, require, to_decimal, to_utc
 from .instruments import default_contract_size, normalize_symbol
 
 NAME = "mt5"
@@ -31,6 +31,12 @@ def parse(data: bytes, filename: str, tz: str = "Etc/GMT-2", contract_sizes: Dic
 
     def row_to_fills(row: Dict[str, object]) -> List[Fill]:
         kind = str(require(row, "type")).strip().lower()
+        if kind == "balance":                 # wpłata / wypłata — do stóp zwrotu, nie do pozycji
+            amount = to_decimal(pick(row, "profit"), allow_empty=True)
+            if amount:
+                result.cash_flows.append(CashFlow(str(require(row, "deal")).split(".")[0],
+                                                  to_utc(require(row, "time"), tz), amount, note="MT5 balance"))
+            return []
         if kind in SKIP_TYPES or not pick(row, "symbol"):
             return []
         if kind not in ("buy", "sell"):

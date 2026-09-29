@@ -62,8 +62,9 @@ def test_mt5_payload_to_fills():
         {"ticket": 11, "time": 1789041600, "symbol": "GOLD", "type": "sell", "entry": "out", "volume": "0.10",
          "price": "2670.10", "commission": "-0.35", "swap": "-1.2", "profit": "200", "contract_size": 100},
     ]})
-    fills, errors = mt5_fills(p)
+    fills, errors, flows = mt5_fills(p)
     assert errors == [] and [f.external_id for f in fills] == ["10", "11"]
+    assert [(x.external_id, str(x.amount)) for x in flows] == [("1", "5000")]
     buy, sell = fills
     assert buy.symbol == "XAUUSD" and buy.ts == datetime.fromtimestamp(1789034400 - 10800, tz=timezone.utc)
     assert buy.broker_pnl is None and str(buy.stop_loss) == "2640"

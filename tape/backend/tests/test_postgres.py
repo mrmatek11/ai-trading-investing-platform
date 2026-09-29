@@ -77,3 +77,23 @@ def test_news_pipeline_on_postgres(client):
         assert len(s.scalars(select(BiasSnapshot)).all()) == 4
     assert client.get("/api/events").json()[0]["sample"] is False
     assert isinstance(Decimal(str(client.get("/api/bias").json()["XAU"]["score"])), Decimal)
+
+
+def test_sync_and_portfolio_on_postgres(client):
+    from test_portfolio import FLEX_CASH, MT5_WITH_BALANCE
+
+    rep = client.post("/api/imports", files={"file": ("d.csv", io.BytesIO(MT5_WITH_BALANCE.encode()), "text/csv")}).json()
+    assert rep["cash_flows"] == 2
+    assert client.post("/api/imports", files={"file": ("f.xml", io.BytesIO(FLEX_CASH), "text/xml")}).json()["cash_flows"] == 1
+    p = client.get("/api/portfolio").json()
+    assert p["balance"] == 34200 and p["months"][0]["ret"] > 0
+
+    tok = client.post("/api/connections/mt5", json={"label": "PG"}).json()["token"]
+    deals = {"gmt_offset": 0, "deals": [
+        {"ticket": 77, "time": 1789034400, "symbol": "XAGUSD", "type": "sell", "entry": "in", "volume": "0.3", "price": "40.12345"},
+        {"ticket": 78, "time": 1789034500, "symbol": "", "type": "balance", "volume": 0, "price": 0, "profit": "500"},
+    ]}
+    r = client.post("/api/ingest/mt5", json=deals, headers={"Authorization": f"Bearer {tok}"}).json()
+    assert r["new"] == 1
+    holding = next(h for h in client.get("/api/portfolio").json()["holdings"] if h["symbol"] == "XAGUSD")
+    assert holding["avg_price"] == "40.12345" and holding["ounces"] == -1500
