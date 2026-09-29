@@ -18,11 +18,13 @@ from decimal import Decimal
 from typing import Optional
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from . import journal
 from . import ai_keys, econ_calendar, market, prop_accounts, reports, service
+from . import discord_auth
 from . import review as ai_review
 from . import sync as broker_sync
 from .auth import AuthError, Verifier, admin_subs, verifier_from_env
@@ -38,7 +40,9 @@ from .news.sample import sample_events
 from .secretbox import SecretBox
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
-PUBLIC_PATHS = {"/api/health", "/api/ingest/mt5"}
+PUBLIC_PATHS = {"/api/health", "/api/ingest/mt5", "/api/auth/config", "/api/auth/discord/login",
+                "/api/auth/discord/callback", "/api/auth/logout"}
+SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 
 
 class SizeRequest(BaseModel):
@@ -122,7 +126,8 @@ def default_ai_client():
 
 
 def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Optional[Verifier] = None,
-               secret_box: Optional[SecretBox] = None, flex_fetch=None, ai_factory=None) -> FastAPI:
+               secret_box: Optional[SecretBox] = None, flex_fetch=None, ai_factory=None,
+               discord: Optional["discord_auth.DiscordConfig"] = None, discord_http=None) -> FastAPI:
     Session = make_sessionmaker(database_url)
     with Session() as s:
         econ_calendar.ensure_seed(s)
@@ -145,17 +150,20 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
     token = os.getenv("TAPE_API_TOKEN", "")
     verify = verifier if verifier is not None else verifier_from_env()
     admins = set(admin_subs())
+    dcfg = discord if discord is not None else discord_auth.DiscordConfig.from_env()
+    sessions = discord_auth.Sessions(dcfg.session_secret) if dcfg else None
+    dhttp = discord_http or discord_auth.default_http
+    multi_user = verify is not None or dcfg is not None
 
     async def auth(request: Request):
         # Konto zawsze z uwierzytelnienia, nigdy z parametrów żądania.
         request.state.account = "default"
-        request.state.is_admin = verify is None          # tryb jednego użytkownika: właściciel = admin
+        request.state.is_admin = not multi_user          # tryb jednego użytkownika: właściciel = admin
+        request.state.profile = None
         if request.url.path in PUBLIC_PATHS:
-            return                                        # health; ingest MT5 ma własny token połączenia
+            return                                        # health, logowanie; ingest MT5 ma własny token połączenia
         header = request.headers.get("authorization", "")
-        if verify is not None:
-            if not header.startswith("Bearer "):
-                raise HTTPException(status_code=401, detail="Zaloguj się")
+        if verify is not None and header.startswith("Bearer "):
             try:
                 sub = verify(header[len("Bearer "):])
             except AuthError as exc:
@@ -163,6 +171,24 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
             request.state.account = sub
             request.state.is_admin = sub in admins
             return
+        cookie = request.cookies.get(discord_auth.SESSION_COOKIE)
+        if sessions is not None and cookie:
+            try:
+                claims = sessions.verify(cookie)
+            except discord_auth.DiscordAuthError as exc:
+                raise HTTPException(status_code=401, detail="Sesja wygasła — zaloguj się ponownie") from exc
+            if request.method not in SAFE_METHODS:
+                # sesja w ciasteczku: zmiany danych tylko z naszej strony (ochrona przed CSRF)
+                origin = request.headers.get("origin") or ""
+                referer = request.headers.get("referer") or ""
+                if origin != dcfg.origin and not (not origin and referer.startswith(dcfg.origin + "/")):
+                    raise HTTPException(status_code=403, detail="Żądanie spoza aplikacji")
+            request.state.account = claims["sub"]
+            request.state.is_admin = claims["sub"] in admins
+            request.state.profile = {"name": claims.get("name"), "avatar": claims.get("avatar"), "provider": "discord"}
+            return
+        if multi_user:
+            raise HTTPException(status_code=401, detail="Zaloguj się")
         if token and not hmac.compare_digest(header, f"Bearer {token}"):
             raise HTTPException(status_code=401, detail="Brak lub niepoprawny token")
 
@@ -200,6 +226,63 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
 
     def load_setups(s, account: str):
         return {x.id: x for x in s.scalars(select(journal.Setup).where(journal.Setup.account == account))}
+
+    # ---- logowanie ----
+
+    @app.get("/api/auth/config")
+    def auth_config():
+        return {"clerk": verify is not None, "discord": dcfg is not None, "single_user": not multi_user}
+
+    @app.get("/api/auth/me")
+    def auth_me(request: Request):
+        p = request.state.profile or {}
+        return {"account": request.state.account, "name": p.get("name"), "avatar": p.get("avatar"),
+                "provider": p.get("provider") or ("clerk" if verify is not None else "local")}
+
+    def _cookie(resp, name, value, max_age, path="/"):
+        resp.set_cookie(name, value, max_age=max_age, path=path, httponly=True, samesite="lax",
+                        secure=dcfg.secure_cookies)
+
+    @app.get("/api/auth/discord/login")
+    def discord_login():
+        if dcfg is None:
+            raise HTTPException(status_code=404, detail="Logowanie Discord nie jest włączone")
+        state = discord_auth.new_state()
+        resp = RedirectResponse(discord_auth.authorize_url(dcfg, state), status_code=302)
+        _cookie(resp, discord_auth.STATE_COOKIE, state, 600, path="/api/auth")
+        return resp
+
+    @app.get("/api/auth/discord/callback")
+    def discord_callback(request: Request, code: str = "", state: str = "", error: str = ""):
+        if dcfg is None:
+            raise HTTPException(status_code=404, detail="Logowanie Discord nie jest włączone")
+
+        def fail(reason: str):
+            resp = RedirectResponse(f"{dcfg.app_url}/?login_error={reason}", status_code=302)
+            resp.delete_cookie(discord_auth.STATE_COOKIE, path="/api/auth")
+            return resp
+
+        expected = request.cookies.get(discord_auth.STATE_COOKIE, "")
+        if error:
+            return fail("cancelled")
+        if not code or not state or not expected or not hmac.compare_digest(state, expected):
+            return fail("state")
+        try:
+            me = discord_auth.exchange(dcfg, code, dhttp)
+        except discord_auth.DiscordAuthError:
+            return fail("discord")
+        name = str(me.get("global_name") or me.get("username") or "Discord")
+        token_ = sessions.issue(f"discord:{me['id']}", name, discord_auth.avatar_url(me))
+        resp = RedirectResponse(f"{dcfg.app_url}/", status_code=302)
+        resp.delete_cookie(discord_auth.STATE_COOKIE, path="/api/auth")
+        _cookie(resp, discord_auth.SESSION_COOKIE, token_, discord_auth.SESSION_TTL)
+        return resp
+
+    @app.post("/api/auth/logout")
+    def logout():
+        resp = JSONResponse({"ok": True})
+        resp.delete_cookie(discord_auth.SESSION_COOKIE, path="/")
+        return resp
 
     @app.get("/api/health")
     def health():

@@ -35,6 +35,7 @@ research: [`../docs/RESEARCH.md`](../docs/RESEARCH.md).
 | Kalkulator pozycji (złoto / srebro) | ✅ zaokrąglanie w dół, ostrzeżenia względem dziennego zasięgu i limitu prop firmy |
 | Reguły prop firm | ✅ dzienny limit, drawdown statyczny / trailing, symulacja tej samej historii na 3 typach kont |
 | Logowanie (Clerk / OIDC) | ✅ JWT weryfikowany po JWKS, konto tylko z tokenu, izolacja danych; włączane zmiennymi środowiskowymi |
+| Logowanie przez Discord | ✅ OAuth2 (zakres `identify`), `state` przeciw CSRF, własna sesja w ciasteczku HttpOnly/Secure/SameSite=Lax (30 dni), zmiany danych tylko z nagłówkiem Origin aplikacji; konto `discord:<id>`; działa obok Clerk |
 | Płatności | ⏳ wymagają konta Paddle |
 
 ## Uruchomienie
@@ -84,6 +85,7 @@ Zmienne środowiskowe:
 | `TAPE_AUTH_AUTHORIZED_PARTIES` | dozwolone adresy frontendu (claim `azp`), po przecinku — zalecane |
 | `TAPE_AUTH_AUDIENCE` | opcjonalnie, gdy dostawca ustawia `aud` |
 | `TAPE_ADMIN_SUBS` | identyfikatory użytkowników-administratorów (wgrywanie cen), po przecinku |
+| `TAPE_DISCORD_CLIENT_ID`, `TAPE_DISCORD_CLIENT_SECRET`, `TAPE_SESSION_SECRET`, `TAPE_APP_URL` | logowanie przez Discord; w Discord Developer Portal dodaj Redirect `<TAPE_APP_URL>/api/auth/discord/callback` |
 | `VITE_CLERK_PUBLISHABLE_KEY` | frontend: klucz publiczny Clerk; bez niego aplikacja działa bez logowania |
 | `TAPE_SECRET_KEYS` | klucze szyfrowania tokenów brokerów, `id:base64(32 B)`, pierwszy aktywny; bez nich połączenie IBKR jest wyłączone |
 | `TAPE_PRICE_PROVIDER` | `twelvedata` (+ `TWELVEDATA_API_KEY`), `oanda` (+ `OANDA_TOKEN`, `OANDA_ENV=practice`) albo `goldapi`; worker: `python -m tape.market --every 300 --backfill 2000` |
