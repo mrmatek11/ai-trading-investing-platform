@@ -20,7 +20,7 @@ from typing import Callable, List, Optional
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from . import gdelt
+from . import gdelt, rss
 from .bias import aggregate
 from .classify import MODEL, Article, classify_cluster
 from .cluster import cluster
@@ -44,20 +44,38 @@ class RunReport:
     snapshots: int = 0
 
 
-def run_once(session: Session, client, fetch: Callable[[], List[Article]] = gdelt.fetch,
+def fetch_all_sources() -> List[Article]:
+    """GDELT + kanały RSS; awaria jednego źródła nie zatrzymuje drugiego."""
+    out: List[Article] = []
+    for name, fn in (("gdelt", gdelt.fetch), ("rss", rss.fetch)):
+        try:
+            out.extend(fn())
+        except Exception as exc:  # sieć / format — pipeline działa dalej na tym, co przyszło
+            log.warning("źródło %s niedostępne: %s", name, exc)
+    return out
+
+
+def ingest(session: Session, articles: List[Article]) -> int:
+    """Zapisz nowe artykuły (po URL); zwraca liczbę nowych."""
+    known = set(session.scalars(select(ArticleRow.url).where(ArticleRow.url.in_([a.url for a in articles]))))
+    n = 0
+    for a in articles:
+        if a.url not in known:
+            session.add(ArticleRow(url=a.url[:1024], title=a.title, published_at=a.published_at))
+            known.add(a.url)
+            n += 1
+    session.flush()
+    return n
+
+
+def run_once(session: Session, client, fetch: Callable[[], List[Article]] = fetch_all_sources,
              now: Optional[datetime] = None) -> RunReport:
     now = now or datetime.now(timezone.utc)
     rep = RunReport()
 
     articles = fetch()
     rep.fetched = len(articles)
-    known = set(session.scalars(select(ArticleRow.url).where(ArticleRow.url.in_([a.url for a in articles]))))
-    for a in articles:
-        if a.url not in known:
-            session.add(ArticleRow(url=a.url, title=a.title, published_at=a.published_at))
-            known.add(a.url)
-            rep.new_articles += 1
-    session.flush()
+    rep.new_articles = ingest(session, articles)
 
     # Grupujemy całe okno 24 h, żeby nowe artykuły dołączały do spraw z poprzednich uruchomień.
     window = [r.to_article() for r in session.scalars(select(ArticleRow).where(ArticleRow.published_at >= now - LOOKBACK))]
@@ -106,12 +124,14 @@ def main(argv=None):
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
-    import anthropic
-
+    from ..ai_keys import server_llm
+    from ..api import default_ai_client
     from ..db import make_sessionmaker
 
     Session_ = make_sessionmaker()
-    client = anthropic.Anthropic()
+    client = server_llm(default_ai_client())          # Claude (ANTHROPIC_API_KEY) albo DeepSeek (DEEPSEEK_API_KEY)
+    if client is None:
+        raise SystemExit("Pipeline newsów potrzebuje ANTHROPIC_API_KEY albo DEEPSEEK_API_KEY")
     while True:
         with Session_() as s:
             rep = run_once(s, client)

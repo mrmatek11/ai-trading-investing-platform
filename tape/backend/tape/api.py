@@ -24,6 +24,8 @@ from sqlalchemy import select
 
 from . import journal
 from . import ai_keys, econ_calendar, market, prop_accounts, reports, service
+from . import brief as daily_brief
+from . import mcp_server
 from . import discord_auth
 from . import review as ai_review
 from . import sync as broker_sync
@@ -41,7 +43,8 @@ from .secretbox import SecretBox
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 PUBLIC_PATHS = {"/api/health", "/api/ingest/mt5", "/api/auth/config", "/api/auth/discord/login",
-                "/api/auth/discord/callback", "/api/auth/logout"}
+                "/api/auth/discord/callback", "/api/auth/logout",
+                "/api/mcp"}                               # MCP: własny token osobisty (Claude Code / Desktop)
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 
 
@@ -96,7 +99,16 @@ class PropAccountIn(PropRequest):
 
 class AiKeyIn(BaseModel):
     api_key: Optional[str] = Field(None, max_length=400)       # None = zostaw obecny klucz, zmień tylko model
-    model: str = Field("claude-opus-5-5", max_length=64)
+    model: str = Field("claude-opus-5-5", max_length=64)       # model wyznacza dostawcę (Claude / DeepSeek)
+
+
+class BriefSubscriptionIn(BaseModel):
+    enabled: bool = True
+    discord_webhook: Optional[str] = Field(None, max_length=300)   # None = bez zmian, "" = odłącz
+
+
+class McpTokenIn(BaseModel):
+    name: str = Field("Claude Code", min_length=1, max_length=80)
 
 
 class SettingsIn(BaseModel):
@@ -125,28 +137,37 @@ def default_ai_client():
     return anthropic.Anthropic()
 
 
+def default_ai():
+    """Model serwera: Claude (ANTHROPIC_API_KEY) albo DeepSeek (DEEPSEEK_API_KEY); brak = None."""
+    return ai_keys.server_llm(default_ai_client())
+
+
 def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Optional[Verifier] = None,
                secret_box: Optional[SecretBox] = None, flex_fetch=None, ai_factory=None,
-               discord: Optional["discord_auth.DiscordConfig"] = None, discord_http=None) -> FastAPI:
+               discord: Optional["discord_auth.DiscordConfig"] = None, discord_http=None,
+               llm_http=None, notify_http=None) -> FastAPI:
     Session = make_sessionmaker(database_url)
     with Session() as s:
         econ_calendar.ensure_seed(s)
     box = secret_box if secret_box is not None else SecretBox.from_env()
     make_ai = ai_factory or ai_keys.default_factory
 
+    def llm_for(key: str, model: str):
+        return ai_keys.make_llm(key, model, ai_keys.provider_of(model), make_ai, llm_http)
+
     def ai_for(account: str):
-        """(klient, model, źródło): klucz użytkownika ma pierwszeństwo przed kluczem serwera."""
+        """(LLM, model, źródło): klucz użytkownika ma pierwszeństwo przed kluczem serwera."""
         with Session() as s:
             try:
                 own = ai_keys.load(s, box, account)
             except Exception:  # uszkodzony/nieodszyfrowalny wpis → traktujemy jak brak klucza
                 own = None
         if own:
-            return make_ai(own[0]), own[1], "user"
+            return ai_keys.make_llm(own[0], own[1], own[2], make_ai, llm_http), own[1], "user"
         if ai is not None and not ai_keys.require_user_key():
-            return ai, ai_keys.DEFAULT_MODEL, "server"
+            return ai, ai.model, "server"
         return None, None, None
-    ai = ai_client if ai_client is not None else default_ai_client()
+    ai = ai_keys.server_llm(ai_client) if ai_client is not None else default_ai()
     token = os.getenv("TAPE_API_TOKEN", "")
     verify = verifier if verifier is not None else verifier_from_env()
     admins = set(admin_subs())
@@ -745,8 +766,11 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
         with Session() as s:
             row = s.get(ai_keys.AiCredential, account)
         return {"has_key": row is not None, "last4": row.last4 if row else None,
+                "provider": (row.provider or "anthropic") if row else None,
                 "model": row.model if row else ai_keys.DEFAULT_MODEL, "models": ai_keys.MODELS,
-                "server_key": ai is not None and not ai_keys.require_user_key(), "encryption": box is not None}
+                "model_provider": ai_keys.PROVIDER, "providers": ai_keys.PROVIDER_LABEL,
+                "server_key": ai is not None and not ai_keys.require_user_key(),
+                "server_provider": ai.provider if ai is not None else None, "encryption": box is not None}
 
     @app.put("/api/ai/key")
     def save_ai_key(body: AiKeyIn, account: str = Depends(current_account)):
@@ -758,20 +782,22 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
         if body.api_key is None and existing is None:
             raise HTTPException(status_code=400, detail="Podaj klucz API")
         try:
-            if body.model not in ai_keys.MODELS:
-                raise ai_keys.KeyError_(f"Nieobsługiwany model: {body.model}")
+            provider = ai_keys.provider_of(body.model)
             if body.api_key is not None:
-                key = ai_keys.check_format(body.api_key)
+                key = ai_keys.check_format(body.api_key, provider)
             else:                                                       # zmiana samego modelu
+                if (existing.provider or "anthropic") != provider:
+                    raise ai_keys.KeyError_(f"Podaj klucz {ai_keys.PROVIDER_LABEL[provider]} — "
+                                            "obecny klucz jest od innego dostawcy.")
                 with Session() as s:
                     key = ai_keys.load(s, box, account)[0]
-            ai_keys.verify(make_ai(key), body.model)
+            ai_keys.verify_llm(llm_for(key, body.model))
         except ai_keys.KeyError_ as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         with Session() as s:
             row = ai_keys.save(s, box, account, key, body.model)
             s.commit()
-            return {"ok": True, "last4": row.last4, "model": row.model}
+            return {"ok": True, "last4": row.last4, "model": row.model, "provider": row.provider}
 
     @app.delete("/api/ai/key")
     def delete_ai_key(account: str = Depends(current_account)):
@@ -933,5 +959,192 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
             n = news_store.add_prices(s, norm_header(asset).upper(), parsed)
             s.commit()
         return {"added": n, "rows": len(rows)}
+
+    # ---- poranny brief ----
+
+    def brief_config():
+        h, m = daily_brief.brief_time()
+        return {"telegram": bool(os.getenv("TAPE_TELEGRAM_BOT_TOKEN")),
+                "bot_username": os.getenv("TAPE_TELEGRAM_BOT_USERNAME", "").lstrip("@") or None,
+                "channel": os.getenv("TAPE_TELEGRAM_CHANNEL_URL", "") or None,
+                "discord": box is not None, "time": f"{h:02d}:{m:02d}", "tz": str(daily_brief.tz())}
+
+    def subscription_dict(sub):
+        return {"enabled": sub.enabled if sub else False,
+                "telegram_linked": bool(sub and sub.telegram_chat_id), "telegram_name": sub.telegram_name if sub else "",
+                "discord_linked": bool(sub and sub.discord_webhook)}
+
+    @app.get("/api/brief")
+    def get_brief(account: str = Depends(current_account)):
+        with Session() as s:
+            row = daily_brief.latest(s)
+            sub = s.get(daily_brief.BriefSubscription, account)
+            return {"brief": {**row.payload, "created_at": row.created_at.isoformat(), "model": row.model} if row else None,
+                    "config": brief_config(), "subscription": subscription_dict(sub)}
+
+    @app.post("/api/brief/generate")
+    def generate_brief(request: Request, account: str = Depends(current_account)):
+        """Brief jest wspólny dla wszystkich — generować na żądanie może tylko administrator."""
+        if not request.state.is_admin:
+            raise HTTPException(status_code=403, detail="Brief generuje się automatycznie rano")
+        llm, _, _ = ai_for(account)
+        with Session() as s:
+            row = daily_brief.create(s, llm, force=True)
+            s.commit()
+            return {**row.payload, "created_at": row.created_at.isoformat(), "model": row.model}
+
+    @app.put("/api/brief/subscription")
+    def save_brief_subscription(body: BriefSubscriptionIn, account: str = Depends(current_account)):
+        with Session() as s:
+            sub = s.get(daily_brief.BriefSubscription, account) or daily_brief.BriefSubscription(account=account)
+            sub.enabled = body.enabled
+            if body.discord_webhook == "":
+                sub.discord_webhook = None
+            elif body.discord_webhook is not None:
+                if box is None:
+                    raise HTTPException(status_code=503, detail="Serwer nie ma klucza szyfrowania (TAPE_SECRET_KEYS)")
+                try:
+                    url = daily_brief.check_webhook(body.discord_webhook)
+                    daily_brief.send_discord(url, {"title": f"{daily_brief.BRAND}: webhook podłączony",
+                                                   "description": "Tu będzie przychodził poranny brief.",
+                                                   "color": 0xC9A86A}, notify_http or daily_brief.default_http)
+                except ValueError as exc:
+                    raise HTTPException(status_code=400, detail=str(exc)) from exc
+                except Exception as exc:  # sieć / Discord odrzucił webhook
+                    raise HTTPException(status_code=400, detail="Discord nie przyjął wiadomości testowej — sprawdź webhook") from exc
+                sub.discord_webhook = box.encrypt(url.encode(), daily_brief.webhook_context(account))
+            sub.updated_at = datetime.now(timezone.utc)
+            s.add(sub)
+            s.commit()
+            return subscription_dict(sub)
+
+    @app.post("/api/brief/telegram/link")
+    def telegram_link(account: str = Depends(current_account)):
+        cfg = brief_config()
+        if not cfg["telegram"] or not cfg["bot_username"]:
+            raise HTTPException(status_code=503, detail="Bot Telegram nie jest skonfigurowany na serwerze")
+        now = datetime.now(timezone.utc)
+        with Session() as s:
+            sub = s.get(daily_brief.BriefSubscription, account) or daily_brief.BriefSubscription(account=account)
+            sub.link_code, sub.link_expires = daily_brief.new_link_code(), now + daily_brief.LINK_TTL
+            sub.enabled = True
+            s.add(sub)
+            s.commit()
+            code = sub.link_code
+        return {"url": f"https://t.me/{cfg['bot_username']}?start={code}", "expires_in": int(daily_brief.LINK_TTL.total_seconds())}
+
+    @app.delete("/api/brief/telegram")
+    def telegram_unlink(account: str = Depends(current_account)):
+        with Session() as s:
+            sub = s.get(daily_brief.BriefSubscription, account)
+            if sub is not None:
+                sub.telegram_chat_id, sub.telegram_name, sub.link_code = None, "", None
+                s.commit()
+            return subscription_dict(sub)
+
+    # ---- MCP: Claude Code / Claude Desktop ----
+
+    @app.get("/api/mcp/tokens")
+    def list_mcp_tokens(account: str = Depends(current_account)):
+        with Session() as s:
+            rows = s.scalars(select(mcp_server.McpToken).where(mcp_server.McpToken.account == account)
+                             .order_by(mcp_server.McpToken.created_at))
+            return [mcp_server.token_dict(r) for r in rows]
+
+    @app.post("/api/mcp/tokens", status_code=201)
+    def create_mcp_token(body: McpTokenIn, account: str = Depends(current_account)):
+        with Session() as s:
+            n = len(list(s.scalars(select(mcp_server.McpToken.id).where(mcp_server.McpToken.account == account))))
+            if n >= 10:
+                raise HTTPException(status_code=400, detail="Masz już 10 tokenów — usuń nieużywane")
+            row, tok = mcp_server.create_token(s, account, body.name.strip())
+            s.commit()
+            return {**mcp_server.token_dict(row), "token": tok}      # token pokazujemy tylko raz
+
+    @app.delete("/api/mcp/tokens/{token_id}")
+    def delete_mcp_token(token_id: str, account: str = Depends(current_account)):
+        with Session() as s:
+            row = s.get(mcp_server.McpToken, token_id)
+            if row is None or row.account != account:
+                raise HTTPException(status_code=404, detail="Nie ma takiego tokenu")
+            s.delete(row)
+            s.commit()
+        return {"ok": True}
+
+    BOOK = {"type": "string", "description": "id rachunku z list_accounts; pomiń = wszystkie rachunki"}
+
+    def _trades(account, a):
+        items = positions(account=account, limit=a.get("limit", 50), book=a.get("book"))
+        if a.get("symbol"):
+            items = [x for x in items if x.get("symbol", "").upper() == a["symbol"].upper()]
+        return {"trades": items}
+
+    def _performance(account, a):
+        st = get_stats(account=account, book=a.get("book"))
+        an = {k: v for k, v in st["analytics"].items() if k not in ("daily", "rolling")}
+        return {"summary": st["summary"], "analytics": an, "segments": st["segments"],
+                "setups": st["setups"], "mistakes": st["mistakes"]}
+
+    def _journal_facts(account, a):
+        facts, _, closed = review_inputs(account, a.get("book"))
+        return {"closed_trades": closed, "facts": facts,
+                "note": "Fakty policzone przez kod; 'nieistotne statystycznie' traktuj jako hipotezę."}
+
+    def _brief(account, a):
+        with Session() as s:
+            row = daily_brief.latest(s)
+            return {"brief": row.payload if row else None}
+
+    mcp_tools = {t.name: t for t in [
+        mcp_server.Tool("list_accounts", "Rachunki handlowe użytkownika (MT5, IBKR, importy).",
+                        {"type": "object", "properties": {}}, lambda acc, a: {"accounts": get_books(account=acc)}),
+        mcp_server.Tool("get_performance", "Statystyki journala: wynik, win rate, profit factor, expectancy, drawdown, "
+                        "Sharpe/Sortino, segmenty (godzina, dzień, kierunek, news), setupy i koszt błędów.",
+                        {"type": "object", "properties": {"book": BOOK}}, _performance),
+        mcp_server.Tool("list_trades", "Ostatnie pozycje (zamknięte i otwarte) z wynikiem, R, setupem i notatkami.",
+                        {"type": "object", "properties": {
+                            "book": BOOK, "symbol": {"type": "string", "description": "np. XAUUSD"},
+                            "limit": {"type": "integer", "minimum": 1, "maximum": 200, "default": 50}}}, _trades),
+        mcp_server.Tool("get_journal_facts", "Fakty F1…Fn z journala (te same, na których opiera się przegląd AI) — "
+                        "baza do własnej analizy procesu tradera.",
+                        {"type": "object", "properties": {"book": BOOK}}, _journal_facts),
+        mcp_server.Tool("get_portfolio", "Portfel: saldo, wpłaty, stopa zwrotu TWR, ekspozycja na złoto/srebro, miesiące.",
+                        {"type": "object", "properties": {"book": BOOK}},
+                        lambda acc, a: get_portfolio(account=acc, book=a.get("book"))),
+        mcp_server.Tool("get_prop_status", "Limity kont prop na dziś: zapas dziennej straty i maksymalnego obsunięcia.",
+                        {"type": "object", "properties": {}}, lambda acc, a: {"accounts": list_prop_accounts(account=acc)}),
+        mcp_server.Tool("get_economic_calendar", "Ważne dane makro USD (Fed, CPI, NFP…) na najbliższe dni.",
+                        {"type": "object", "properties": {"days": {"type": "integer", "minimum": 1, "maximum": 30, "default": 7}}},
+                        lambda acc, a: calendar(days=a.get("days", 7))),
+        mcp_server.Tool("get_market_quotes", "Ostatnie ceny XAU i XAG ze zmianą 24 h i wiekiem notowania.",
+                        {"type": "object", "properties": {}}, lambda acc, a: {"quotes": market_quotes()}),
+        mcp_server.Tool("get_daily_brief", "Dzisiejszy poranny brief: kalendarz, ceny, nagłówki i komentarz AI.",
+                        {"type": "object", "properties": {}}, _brief),
+    ]}
+
+    @app.api_route("/api/mcp", methods=["GET", "DELETE"])
+    def mcp_no_stream():
+        return JSONResponse({"error": "Serwer MCP działa bezstanowo: tylko POST"}, status_code=405, headers={"Allow": "POST"})
+
+    @app.post("/api/mcp")
+    async def mcp_endpoint(request: Request):
+        origin = request.headers.get("origin")
+        if origin and not (dcfg and origin == dcfg.origin):        # ochrona przed DNS rebinding z przeglądarki
+            return JSONResponse({"error": "Niedozwolone Origin"}, status_code=403)
+        header = request.headers.get("authorization", "")
+        tok = header[len("Bearer "):].strip() if header.startswith("Bearer ") else ""
+        with Session() as s:
+            acc = mcp_server.account_for(s, tok) if tok else None
+            s.commit()
+        if acc is None:
+            return JSONResponse({"error": "Brak lub niepoprawny token MCP (Ustawienia → Claude Code)"}, status_code=401,
+                                headers={"WWW-Authenticate": 'Bearer realm="goldtape"'})
+        raw = await request.body()
+        if len(raw) > 1024 * 1024:
+            return JSONResponse({"error": "Za duże żądanie"}, status_code=413)
+        out = mcp_server.handle(raw, acc, mcp_tools)
+        if out is None:
+            return JSONResponse(None, status_code=202)
+        return JSONResponse(out)
 
     return app

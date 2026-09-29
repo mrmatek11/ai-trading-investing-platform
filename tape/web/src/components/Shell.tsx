@@ -17,6 +17,16 @@ const NAV: { to: string; label: string; icon: ReactNode }[] = [
     ),
   },
   {
+    to: "/brief",
+    label: "Brief dnia",
+    icon: (
+      <>
+        <circle cx="12" cy="12" r="4" />
+        <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+      </>
+    ),
+  },
+  {
     to: "/trades",
     label: "Transakcje",
     icon: <path d="M4 7h16M4 12h16M4 17h10" />,
@@ -93,6 +103,9 @@ const COMMANDS: Record<string, string> = {
   PORTFOLIO: "/portfolio",
   PF: "/portfolio",
   CONNECT: "/connections",
+  BRIEF: "/brief",
+  NEWS: "/brief",
+  MORNING: "/brief",
 };
 
 export function Shell() {

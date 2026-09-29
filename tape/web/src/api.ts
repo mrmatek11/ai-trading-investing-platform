@@ -334,7 +334,54 @@ export type PropAccountStatus = {
   rules: { initial_balance: number; daily_loss_pct: number; max_drawdown_pct: number; drawdown_type: "static" | "trailing"; profit_target_pct: number | null; day_tz: string };
 };
 
-export type AiSettings = { has_key: boolean; last4: string | null; model: string; models: Record<string, string>; server_key: boolean; encryption: boolean };
+export type BriefCalendar = { ts: string; local: string; when: string; title: string; impact: "high" | "medium" | "low"; forecast: string; previous: string };
+export type BriefHeadline = { title: string; url: string; source: string; ts: string; local: string };
+export type BriefAi = {
+  headline: string;
+  what_decides: string;
+  what_decides_facts: string[];
+  events: { fact: string; why: string; if_above: string; if_below: string }[];
+  drivers: { title: string; detail: string; facts: string[] }[];
+  outlook: { asset: "XAU" | "XAG"; lean: "byczo" | "neutralnie" | "niedźwiedzio"; reasoning: string; facts: string[] }[];
+  risk: string;
+  dropped: number;
+};
+export type Brief = {
+  day: string;
+  generated_at: string;
+  created_at: string;
+  model: string;
+  provider: string;
+  tz: string;
+  calendar: BriefCalendar[];
+  quotes: Quote[];
+  headlines: BriefHeadline[];
+  news_events: { title: string; summary: string; xau: string; xag: string }[];
+  facts: { id: string; kind: string; text: string }[];
+  ai: BriefAi | null;
+  ai_error: string;
+};
+export type BriefSubscription = { enabled: boolean; telegram_linked: boolean; telegram_name: string; discord_linked: boolean };
+export type BriefResponse = {
+  brief: Brief | null;
+  config: { telegram: boolean; bot_username: string | null; channel: string | null; discord: boolean; time: string; tz: string };
+  subscription: BriefSubscription;
+};
+export type McpToken = { id: string; name: string; hint: string; created_at: string; last_used_at: string | null };
+
+export type AiProvider = "anthropic" | "deepseek";
+export type AiSettings = {
+  has_key: boolean;
+  last4: string | null;
+  provider: AiProvider | null;
+  model: string;
+  models: Record<string, string>;
+  model_provider: Record<string, AiProvider>;
+  providers: Record<AiProvider, string>;
+  server_key: boolean;
+  server_provider: AiProvider | null;
+  encryption: boolean;
+};
 
 export type UserSettings = { email: string; weekly_report: boolean; prop_alerts: boolean; mail_configured: boolean };
 
@@ -357,8 +404,16 @@ export const api = {
   setups: (book: string | null = null) => get<Setup[]>(`/api/setups${bq(book)}`),
   books: () => get<Book[]>("/api/books"),
   aiSettings: () => get<AiSettings>("/api/ai/settings"),
-  saveAiKey: (body: { api_key?: string; model: string }) => send<{ ok: boolean; last4: string; model: string }>("PUT", "/api/ai/key", body),
+  saveAiKey: (body: { api_key?: string; model: string }) => send<{ ok: boolean; last4: string; model: string; provider: AiProvider }>("PUT", "/api/ai/key", body),
   deleteAiKey: () => send<{ ok: boolean }>("DELETE", "/api/ai/key"),
+  brief: () => get<BriefResponse>("/api/brief"),
+  generateBrief: () => send<Brief>("POST", "/api/brief/generate"),
+  saveBriefSubscription: (body: { enabled: boolean; discord_webhook?: string }) => send<BriefSubscription>("PUT", "/api/brief/subscription", body),
+  telegramLink: () => send<{ url: string; expires_in: number }>("POST", "/api/brief/telegram/link"),
+  telegramUnlink: () => send<BriefSubscription>("DELETE", "/api/brief/telegram"),
+  mcpTokens: () => get<McpToken[]>("/api/mcp/tokens"),
+  createMcpToken: (name: string) => send<McpToken & { token: string }>("POST", "/api/mcp/tokens", { name }),
+  deleteMcpToken: (id: string) => send<{ ok: boolean }>("DELETE", `/api/mcp/tokens/${id}`),
   settings: () => get<UserSettings>("/api/settings"),
   saveSettings: (body: Omit<UserSettings, "mail_configured">) => send<{ ok: boolean }>("PUT", "/api/settings", body),
   weeklyPreview: () => get<{ subject: string; html: string; text: string }>("/api/reports/weekly/preview"),

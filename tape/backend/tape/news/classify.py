@@ -13,6 +13,7 @@ from typing import List, Literal, Optional, Sequence
 
 from pydantic import BaseModel, Field
 
+from ..llm import as_llm
 from .bias import Event, Impact
 
 MODEL = "claude-opus-5-5"
@@ -88,19 +89,10 @@ def validate_evidence(result: EventClassification, articles: Sequence[Article]) 
 
 def classify_cluster(client, cluster_id: str, articles: Sequence[Article]) -> Optional[Event]:
     """Sklasyfikuj klaster; zwraca None przy odmowie albo braku zweryfikowanych dowodów."""
-    response = client.beta.messages.parse(
-        model=MODEL,
-        max_tokens=4000,
-        betas=["server-side-fallback-2026-07-01"],
-        fallbacks="default",
-        system=[{"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
-        output_config={"effort": "medium"},
-        output_format=EventClassification,
-        messages=[{"role": "user", "content": _user_prompt(articles)}],
-    )
-    if response.stop_reason == "refusal" or response.parsed_output is None:
+    parsed = as_llm(client, MODEL).parse(SYSTEM_PROMPT, _user_prompt(articles), EventClassification)
+    if parsed is None:
         return None
-    result = validate_evidence(response.parsed_output, articles)
+    result = validate_evidence(parsed, articles)
     if not result.evidence:
         return None  # ocena bez weryfikowalnego cytatu nie trafia do nastawienia
     occurred = min(a.published_at for a in articles)

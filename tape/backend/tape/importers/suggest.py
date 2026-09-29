@@ -13,6 +13,7 @@ from typing import Dict, List, Literal, Optional, Sequence
 
 from pydantic import BaseModel, Field
 
+from ..llm import as_llm
 from .base import norm_header
 from .generic import OPTIONAL, REQUIRED
 
@@ -72,18 +73,7 @@ def ai_suggest(client, headers: Sequence[str], rows: Sequence[Dict[str, object]]
         "dokładne wartości oznaczające kupno i sprzedaż w kolumnie side.\n\n"
         f"Nagłówki:\n{' | '.join(headers)}\n\nPróbka:\n{sample}"
     )
-    response = client.beta.messages.parse(
-        model=model,
-        max_tokens=3000,
-        betas=["server-side-fallback-2026-07-01"],
-        fallbacks="default",
-        output_config={"effort": "low"},
-        output_format=MappingSuggestion,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    if response.stop_reason == "refusal":
-        return None
-    return response.parsed_output
+    return as_llm(client, model).parse("", prompt, MappingSuggestion, max_tokens=3000, effort="low")
 
 
 def suggest(headers: Sequence[str], rows: Sequence[Dict[str, object]], client=None, model: str = MODEL) -> Dict[str, object]:

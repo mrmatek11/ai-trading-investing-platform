@@ -5,6 +5,7 @@ import { createRoot } from "react-dom/client";
 import { AuthGate } from "./auth";
 import { BookProvider } from "./book";
 import { Shell } from "./components/Shell";
+import { BriefPage } from "./pages/Brief";
 import { ConnectionsPage } from "./pages/Connections";
 import { Dashboard } from "./pages/Dashboard";
 import { ImportPage } from "./pages/Import";
@@ -18,6 +19,7 @@ import "./styles.css";
 const root = createRootRoute({ component: Shell });
 const routeTree = root.addChildren([
   createRoute({ getParentRoute: () => root, path: "/", component: Dashboard }),
+  createRoute({ getParentRoute: () => root, path: "/brief", component: BriefPage }),
   createRoute({ getParentRoute: () => root, path: "/trades", component: Trades }),
   // Wykres transakcji (lightweight-charts) też osobno — lista i dashboard ładują się szybciej.
   createRoute({ getParentRoute: () => root, path: "/trades/$key", component: lazyRouteComponent(() => import("./pages/TradeDetail"), "TradeDetail") }),

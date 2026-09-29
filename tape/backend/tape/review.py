@@ -23,6 +23,7 @@ from . import journal
 from .db import Base, UtcDateTime
 from .engine import stats
 from .engine.positions import Position
+from .llm import as_llm
 
 MODEL = "claude-opus-5-5"
 MIN_TRADES = 10
@@ -147,20 +148,13 @@ def validate(out: ReviewOutput, facts: Sequence[Dict[str, str]]) -> Dict[str, ob
 
 
 def generate(client, facts: Sequence[Dict[str, str]], model: str = MODEL) -> Optional[Dict[str, object]]:
+    """`client` = klient Anthropic albo dowolny llm.LLM (np. DeepSeek)."""
     listing = "\n".join(f"{f['id']}: {f['text']}" for f in facts)
-    response = client.beta.messages.parse(
-        model=model,
-        max_tokens=8000,
-        betas=["server-side-fallback-2026-07-01"],
-        fallbacks="default",
-        system=[{"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
-        output_config={"effort": "medium"},
-        output_format=ReviewOutput,
-        messages=[{"role": "user", "content": f"<fakty>\n{listing}\n</fakty>\n\nNapisz przegląd."}],
-    )
-    if response.stop_reason == "refusal" or response.parsed_output is None:
+    out = as_llm(client, model).parse(SYSTEM_PROMPT, f"<fakty>\n{listing}\n</fakty>\n\nNapisz przegląd.",
+                                      ReviewOutput, max_tokens=8000)
+    if out is None:
         return None
-    return validate(response.parsed_output, facts)
+    return validate(out, facts)
 
 
 def latest(session: Session, account: str) -> Optional[ReviewRow]:

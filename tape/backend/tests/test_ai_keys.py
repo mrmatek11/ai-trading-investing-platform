@@ -1,4 +1,5 @@
 import base64
+import json
 import io
 import os
 from types import SimpleNamespace
@@ -38,6 +39,27 @@ class Factory:
         return SimpleNamespace(models=SimpleNamespace(retrieve=retrieve), beta=SimpleNamespace(messages=msgs))
 
 
+DS_GOOD = "sk-" + "a1" * 16
+DS_BAD = "sk-" + "ff" * 16
+
+
+class FakeDeepSeek:
+    """Podstawione API DeepSeek (zgodne z OpenAI): /models i /chat/completions."""
+
+    def __init__(self, content=None):
+        self.requests = []
+        self.content = content
+
+    def __call__(self, method, url, headers, data):
+        self.requests.append((method, url, headers, json.loads(data) if data else None))
+        if headers["Authorization"] != f"Bearer {DS_GOOD}":
+            return 401, b'{"error": {"message": "Authentication Fails"}}'
+        if url.endswith("/models"):
+            return 200, json.dumps({"data": [{"id": "deepseek-chat"}, {"id": "deepseek-reasoner"}]}).encode()
+        content = self.content if self.content is not None else fake_output().model_dump_json()
+        return 200, json.dumps({"choices": [{"message": {"content": content}}]}).encode()
+
+
 def hdr(sub):
     return {"Authorization": f"Bearer {token(sub)}"}
 
@@ -49,7 +71,7 @@ def env(tmp_path, monkeypatch):
     box = SecretBox.from_env("k1:" + base64.b64encode(os.urandom(32)).decode())
     verify = LocalVerifier("https://unused/jwks.json", ISSUER, authorized_parties=("https://app.example.com",))
     url = f"sqlite:///{tmp_path / 'a.db'}"
-    return TestClient(create_app(url, verifier=verify, secret_box=box, ai_factory=f)), f, url
+    return TestClient(create_app(url, verifier=verify, secret_box=box, ai_factory=f, llm_http=FakeDeepSeek())), f, url
 
 
 def test_key_lifecycle_encrypted_and_masked(env):
@@ -59,7 +81,7 @@ def test_key_lifecycle_encrypted_and_masked(env):
     assert r.status_code == 400 and "odrzucił" in r.json()["detail"]
     assert c.get("/api/ai/settings", headers=hdr("a")).json()["has_key"] is False                      # nic nie zapisano
     ok = c.put("/api/ai/key", headers=hdr("a"), json={"api_key": GOOD, "model": "claude-sonnet-5-5"}).json()
-    assert ok == {"ok": True, "last4": "AAAA", "model": "claude-sonnet-5-5"}
+    assert ok == {"ok": True, "last4": "AAAA", "model": "claude-sonnet-5-5", "provider": "anthropic"}
     st = c.get("/api/ai/settings", headers=hdr("a")).json()
     assert st["has_key"] and st["last4"] == "AAAA" and GOOD not in str(st)
     from tape.ai_keys import AiCredential
@@ -104,3 +126,39 @@ def test_no_encryption_no_key_storage(tmp_path, monkeypatch):
     monkeypatch.delenv("TAPE_SECRET_KEYS", raising=False)
     c = TestClient(create_app(f"sqlite:///{tmp_path / 'n.db'}", ai_factory=Factory()))
     assert c.put("/api/ai/key", json={"api_key": GOOD}).status_code == 503
+
+
+def test_deepseek_key_and_review(env):
+    c, f, _ = env
+    assert c.put("/api/ai/key", headers=hdr("a"), json={"api_key": GOOD, "model": "deepseek-chat"}).status_code == 400
+    r = c.put("/api/ai/key", headers=hdr("a"), json={"api_key": DS_BAD, "model": "deepseek-chat"})
+    assert r.status_code == 400 and "DeepSeek odrzucił" in r.json()["detail"]
+    ok = c.put("/api/ai/key", headers=hdr("a"), json={"api_key": DS_GOOD, "model": "deepseek-chat"}).json()
+    assert ok["provider"] == "deepseek" and ok["last4"] == DS_GOOD[-4:]
+    st = c.get("/api/ai/settings", headers=hdr("a")).json()
+    assert st["provider"] == "deepseek" and DS_GOOD not in str(st)
+    # zmiana modelu na innego dostawcę bez nowego klucza → błąd, nie wysłanie klucza DeepSeek do Anthropic
+    r = c.put("/api/ai/key", headers=hdr("a"), json={"model": "claude-opus-5-5"})
+    assert r.status_code == 400 and not f.keys
+    c.post("/api/imports", headers=hdr("a"), files={"file": ("d.csv", io.BytesIO(deals_csv(12)), "text/csv")})
+    assert c.get("/api/review", headers=hdr("a")).json()["ai_source"] == "user"
+    r = c.post("/api/review", headers=hdr("a"))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["dropped"] >= 1                          # ta sama walidacja liczb co dla Claude
+    assert "1234.56" not in json.dumps(body["leaks"])
+
+
+def test_deepseek_llm_rejects_malformed_json():
+    from tape.llm import DeepSeekLLM
+    from tape.review import ReviewOutput
+
+    bad = DeepSeekLLM(DS_GOOD, "deepseek-chat", FakeDeepSeek(content="to nie jest JSON"))
+    assert bad.parse("s", "u", ReviewOutput) is None
+    fenced = DeepSeekLLM(DS_GOOD, "deepseek-chat", FakeDeepSeek(content="```json\n" + fake_output().model_dump_json() + "\n```"))
+    assert fenced.parse("s", "u", ReviewOutput).headline
+    http = FakeDeepSeek()
+    DeepSeekLLM(DS_GOOD, "deepseek-reasoner", http).parse("s", "u", ReviewOutput)
+    assert "response_format" not in http.requests[-1][3]            # reasoner nie ma trybu JSON
+    DeepSeekLLM(DS_GOOD, "deepseek-chat", http).parse("s", "u", ReviewOutput)
+    assert http.requests[-1][3]["response_format"] == {"type": "json_object"}
