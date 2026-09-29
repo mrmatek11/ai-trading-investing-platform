@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from . import journal
+from .auth import AuthError, Verifier, admin_subs, verifier_from_env
 from .db import ImportRow, load_fills, make_sessionmaker, store_fills
 from .engine import prop, risk, stats
 from .engine.positions import build_positions
@@ -66,7 +67,6 @@ class PropRequest(BaseModel):
     drawdown_type: str = Field("static", pattern="^(static|trailing)$")
     profit_target_pct: Decimal | None = Field(Decimal(10), gt=0)
     day_tz: str = "Europe/Prague"
-    account: str = "default"
 
 
 def default_ai_client():
@@ -78,17 +78,35 @@ def default_ai_client():
     return anthropic.Anthropic()
 
 
-def create_app(database_url: Optional[str] = None, ai_client=None) -> FastAPI:
+def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Optional[Verifier] = None) -> FastAPI:
     Session = make_sessionmaker(database_url)
     ai = ai_client if ai_client is not None else default_ai_client()
     token = os.getenv("TAPE_API_TOKEN", "")
+    verify = verifier if verifier is not None else verifier_from_env()
+    admins = set(admin_subs())
 
     async def auth(request: Request):
-        if not token or request.url.path == "/api/health":
+        # Konto zawsze z uwierzytelnienia, nigdy z parametrów żądania.
+        request.state.account = "default"
+        request.state.is_admin = verify is None          # tryb jednego użytkownika: właściciel = admin
+        if request.url.path == "/api/health":
             return
         header = request.headers.get("authorization", "")
-        if not hmac.compare_digest(header, f"Bearer {token}"):
+        if verify is not None:
+            if not header.startswith("Bearer "):
+                raise HTTPException(status_code=401, detail="Zaloguj się")
+            try:
+                sub = verify(header[len("Bearer "):])
+            except AuthError as exc:
+                raise HTTPException(status_code=401, detail="Sesja wygasła lub token jest niepoprawny") from exc
+            request.state.account = sub
+            request.state.is_admin = sub in admins
+            return
+        if token and not hmac.compare_digest(header, f"Bearer {token}"):
             raise HTTPException(status_code=401, detail="Brak lub niepoprawny token")
+
+    def current_account(request: Request) -> str:
+        return request.state.account
 
     app = FastAPI(title="Tape API", version="0.1.0", dependencies=[Depends(auth)])
 
@@ -147,7 +165,7 @@ def create_app(database_url: Optional[str] = None, ai_client=None) -> FastAPI:
         broker: Optional[str] = Form(None),
         tz: Optional[str] = Form(None),
         mapping: Optional[str] = Form(None),
-        account: str = Form("default"),
+        account: str = Depends(current_account),
     ):
         data = await file.read()
         if len(data) > MAX_UPLOAD_BYTES:
@@ -173,7 +191,7 @@ def create_app(database_url: Optional[str] = None, ai_client=None) -> FastAPI:
                 "duplicates": dup, "errors": result.errors[:50], "error_count": len(result.errors)}
 
     @app.get("/api/positions")
-    def positions(account: str = "default", limit: int = 200):
+    def positions(account: str = Depends(current_account), limit: int = 200):
         items = positions_for(account)
         items.sort(key=lambda p: p.closed_at or p.opened_at, reverse=True)
         with Session() as s:
@@ -182,7 +200,7 @@ def create_app(database_url: Optional[str] = None, ai_client=None) -> FastAPI:
         return [position_dict(p, entries.get(p.key), setups) for p in items[:limit]]
 
     @app.get("/api/positions/{key}")
-    def position_detail(key: str, account: str = "default"):
+    def position_detail(key: str, account: str = Depends(current_account)):
         items = positions_for(account)
         p = next((x for x in items if x.key == key), None)
         if p is None:
@@ -208,7 +226,7 @@ def create_app(database_url: Optional[str] = None, ai_client=None) -> FastAPI:
         }
 
     @app.put("/api/positions/{key}/journal")
-    def save_journal(key: str, body: JournalIn, account: str = "default"):
+    def save_journal(key: str, body: JournalIn, account: str = Depends(current_account)):
         p = next((x for x in positions_for(account) if x.key == key), None)
         if p is None:
             raise HTTPException(status_code=404, detail="Nie ma takiej pozycji")
@@ -234,7 +252,7 @@ def create_app(database_url: Optional[str] = None, ai_client=None) -> FastAPI:
         return {"mistakes": journal.MISTAKES}
 
     @app.get("/api/setups")
-    def list_setups(account: str = "default"):
+    def list_setups(account: str = Depends(current_account)):
         items = positions_for(account)
         with Session() as s:
             setups = load_setups(s, account)
@@ -245,7 +263,7 @@ def create_app(database_url: Optional[str] = None, ai_client=None) -> FastAPI:
                 for x in sorted(setups.values(), key=lambda v: v.name.lower())]
 
     @app.post("/api/setups", status_code=201)
-    def create_setup(body: SetupIn, account: str = "default"):
+    def create_setup(body: SetupIn, account: str = Depends(current_account)):
         with Session() as s:
             if body.name.strip() in {x.name for x in load_setups(s, account).values()}:
                 raise HTTPException(status_code=409, detail="Setup o tej nazwie już istnieje")
@@ -256,7 +274,7 @@ def create_app(database_url: Optional[str] = None, ai_client=None) -> FastAPI:
             return {"id": row.id}
 
     @app.put("/api/setups/{setup_id}")
-    def update_setup(setup_id: int, body: SetupIn, account: str = "default"):
+    def update_setup(setup_id: int, body: SetupIn, account: str = Depends(current_account)):
         with Session() as s:
             setups = load_setups(s, account)
             row = setups.get(setup_id)
@@ -270,7 +288,7 @@ def create_app(database_url: Optional[str] = None, ai_client=None) -> FastAPI:
         return {"ok": True}
 
     @app.delete("/api/setups/{setup_id}")
-    def delete_setup(setup_id: int, account: str = "default"):
+    def delete_setup(setup_id: int, account: str = Depends(current_account)):
         with Session() as s:
             row = load_setups(s, account).get(setup_id)
             if row is None:
@@ -282,7 +300,7 @@ def create_app(database_url: Optional[str] = None, ai_client=None) -> FastAPI:
         return {"ok": True}
 
     @app.get("/api/stats")
-    def get_stats(account: str = "default"):
+    def get_stats(account: str = Depends(current_account)):
         items = positions_for(account)
         with Session() as s:
             entries = journal.entries_by_key(s, account)
@@ -310,13 +328,13 @@ def create_app(database_url: Optional[str] = None, ai_client=None) -> FastAPI:
                 "warnings": list(r.warnings)}
 
     @app.post("/api/prop/evaluate")
-    def prop_evaluate(req: PropRequest):
+    def prop_evaluate(req: PropRequest, account: str = Depends(current_account)):
         try:
             rules = prop.PropRules(req.initial_balance, req.daily_loss_pct, req.max_drawdown_pct,
                                    req.drawdown_type, req.profit_target_pct, req.day_tz, name="Twoje konto")
         except Exception as exc:  # np. nieznana strefa czasowa
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-        items = positions_for(req.account)
+        items = positions_for(account)
         try:
             report = prop.evaluate(items, rules)
         except Exception as exc:
@@ -370,8 +388,12 @@ def create_app(database_url: Optional[str] = None, ai_client=None) -> FastAPI:
         return out
 
     @app.post("/api/prices")
-    async def upload_prices(file: UploadFile = File(...), asset: str = Form("XAU")):
-        """CSV z cenami do liczenia trafności: kolumny czasu (timestamp/date/time) i ceny (close/price)."""
+    async def upload_prices(request: Request, file: UploadFile = File(...), asset: str = Form("XAU")):
+        """CSV z cenami do liczenia trafności: kolumny czasu (timestamp/date/time) i ceny (close/price).
+
+        Ceny są wspólne dla wszystkich użytkowników, więc przy włączonym logowaniu tylko admin."""
+        if not request.state.is_admin:
+            raise HTTPException(status_code=403, detail="Tylko administrator może wgrywać ceny")
         from .importers.base import norm_header, read_rows, to_utc
 
         data = await file.read()

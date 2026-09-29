@@ -187,12 +187,28 @@ export type PropResponse = {
   note: string;
 };
 
+// Token logowania (Clerk) — ustawiany przez AuthGate; w trybie jednego użytkownika brak.
+let tokenProvider: (() => Promise<string | null>) | null = null;
+
+export function setTokenProvider(fn: (() => Promise<string | null>) | null) {
+  tokenProvider = fn;
+}
+
+async function authed(path: string, init: RequestInit = {}): Promise<Response> {
+  const token = tokenProvider ? await tokenProvider() : null;
+  const headers = new Headers(init.headers);
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const res = await fetch(path, { ...init, headers });
+  if (res.status === 401) throw new Error("Sesja wygasła — zaloguj się ponownie.");
+  return res;
+}
+
 async function post<T>(path: string, body: unknown): Promise<T> {
   return send<T>("POST", path, body);
 }
 
 async function send<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(path, {
+  const res = await authed(path, {
     method,
     headers: body === undefined ? undefined : { "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -208,7 +224,7 @@ async function send<T>(method: string, path: string, body?: unknown): Promise<T>
 }
 
 async function get<T>(path: string): Promise<T> {
-  const res = await fetch(path);
+  const res = await authed(path);
   if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
   return res.json() as Promise<T>;
 }
@@ -231,7 +247,7 @@ export const api = {
   async suggestMapping(file: File): Promise<SuggestResponse> {
     const body = new FormData();
     body.append("file", file);
-    const res = await fetch("/api/imports/suggest", { method: "POST", body });
+    const res = await authed("/api/imports/suggest", { method: "POST", body });
     if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
     return res.json() as Promise<SuggestResponse>;
   },
@@ -241,7 +257,7 @@ export const api = {
     if (mapping) body.append("mapping", JSON.stringify(mapping));
     else if (broker !== "auto") body.append("broker", broker);
     if (tz && !mapping) body.append("tz", tz);
-    const res = await fetch("/api/imports", { method: "POST", body });
+    const res = await authed("/api/imports", { method: "POST", body });
     if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
     return res.json() as Promise<ImportReport>;
   },

@@ -23,7 +23,8 @@ research: [`../docs/RESEARCH.md`](../docs/RESEARCH.md).
 | Pipeline newsów (tryb shadow) | ✅ GDELT → grupowanie → Claude → log ocen (append-only) → trafność vs ceny (`/api/prices`) |
 | Kalkulator pozycji (złoto / srebro) | ✅ zaokrąglanie w dół, ostrzeżenia względem dziennego zasięgu i limitu prop firmy |
 | Reguły prop firm | ✅ dzienny limit, drawdown statyczny / trailing, symulacja tej samej historii na 3 typach kont |
-| Logowanie, płatności | ⏳ wymagają kont Clerk i Paddle |
+| Logowanie (Clerk / OIDC) | ✅ JWT weryfikowany po JWKS, konto tylko z tokenu, izolacja danych; włączane zmiennymi środowiskowymi |
+| Płatności | ⏳ wymagają konta Paddle |
 
 ## Uruchomienie
 
@@ -52,7 +53,12 @@ Zmienne środowiskowe:
 | Zmienna | Znaczenie |
 |---------|-----------|
 | `DATABASE_URL` | domyślnie `sqlite:///tape.db`; produkcyjnie PostgreSQL |
-| `TAPE_API_TOKEN` | opcjonalny token (nagłówek `Authorization: Bearer …`) do czasu wdrożenia logowania |
+| `TAPE_API_TOKEN` | tryb jednego użytkownika: opcjonalny stały token (`Authorization: Bearer …`) |
+| `TAPE_AUTH_JWKS_URL`, `TAPE_AUTH_ISSUER` | włączają logowanie: JWKS i wystawca tokenów (Clerk: `https://<instancja>/.well-known/jwks.json`, `https://<instancja>`) |
+| `TAPE_AUTH_AUTHORIZED_PARTIES` | dozwolone adresy frontendu (claim `azp`), po przecinku — zalecane |
+| `TAPE_AUTH_AUDIENCE` | opcjonalnie, gdy dostawca ustawia `aud` |
+| `TAPE_ADMIN_SUBS` | identyfikatory użytkowników-administratorów (wgrywanie cen), po przecinku |
+| `VITE_CLERK_PUBLISHABLE_KEY` | frontend: klucz publiczny Clerk; bez niego aplikacja działa bez logowania |
 | `ANTHROPIC_API_KEY` | klasyfikator newsów i propozycje mapowania CSV; bez klucza działają fallbacki |
 
 ## Stack

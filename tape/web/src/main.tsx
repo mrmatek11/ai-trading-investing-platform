@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createRootRoute, createRoute, createRouter, lazyRouteComponent, RouterProvider } from "@tanstack/react-router";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { AuthGate } from "./auth";
 import { Shell } from "./components/Shell";
 import { Dashboard } from "./pages/Dashboard";
 import { ImportPage } from "./pages/Import";
@@ -36,7 +37,9 @@ const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 30
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
+      <AuthGate>
+        <RouterProvider router={router} />
+      </AuthGate>
     </QueryClientProvider>
   </StrictMode>,
 );

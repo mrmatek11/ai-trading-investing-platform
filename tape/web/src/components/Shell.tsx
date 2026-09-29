@@ -1,5 +1,6 @@
 import { Link, Outlet, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useAccountMenu } from "../auth";
 
 const NAV: { to: string; label: string; icon: ReactNode }[] = [
   {
@@ -66,6 +67,7 @@ const COMMANDS: Record<string, string> = {
 
 export function Shell() {
   const navigate = useNavigate();
+  const accountMenu = useAccountMenu();
   const input = useRef<HTMLInputElement>(null);
   const [cmd, setCmd] = useState("");
   const [error, setError] = useState("");
@@ -174,6 +176,8 @@ export function Shell() {
             <kbd className="num rounded border border-line px-1.5 text-[11px]">⌘K</kbd>
           </form>
           {error && <span role="status" className="text-xs text-warn">{error}</span>}
+          <div className="flex-1" />
+          {accountMenu}
         </header>
         <main className="min-h-0 flex-1">
           <Outlet />
