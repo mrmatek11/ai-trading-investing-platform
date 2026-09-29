@@ -41,6 +41,51 @@ London breakout przy innych założeniach strefy czasowej danych: UTC+2 → +0,1
   (dokładne godziny sesji w UTC, realny spread w oknie otwarcia Londynu, dłuższa historia), **nie do handlu**.
 - Strategia bota nie powinna być używana do automatycznego handlu złotem.
 
+## Złoto — daytrading (M15, `research/intraday_lab.py`)
+
+Stan: 2026-09-29. Dane: `ejtraderLabs/historical-data` XAUUSD M15, 2012-05 → 2022-03 (230 400 świec).
+
+**Metodyka**
+- Czas: dane MT5 są w czasie serwera EET/EEST — przerwa dzienna złota wypada zawsze o 00:00 serwera,
+  a w tygodniach między zmianą czasu w USA i UE przesuwa się o godzinę. Sesje liczone w czasie lokalnym
+  Londynu / Nowego Jorku. (Wcześniejszy test London breakout zakładał stałe przesunięcie — był o godzinę
+  przesunięty przez część roku.)
+- Wejście zleceniem stop (luka przez poziom = fill po open), SL przed TP w tej samej świecy, bez pozycji na noc.
+- Koszt 0,40 USD/oz na transakcję (spread + poślizg ECN), wrażliwość 0,2 / 0,6 / 1,0 USD.
+- Parametry wybierane tylko na 2012–2016; ocena na 2017–2022 (out-of-sample). Punkt odniesienia:
+  losowy kierunek w tych samych godzinach z tym samym zarządzaniem — traci ≈ koszt, zgodnie z oczekiwaniem.
+- Rodzina 8 strategii → próg Bonferroni (α = 5%): **t > 2,73**.
+
+| Strategia | IS 2012–16: śr. bps (t) | OOS 2017–22: n · śr. bps (t) | PF OOS | lata OOS na plus |
+|-----------|-------------------------|------------------------------|--------|------------------|
+| London ORB (08:00 LDN) | +0,2 (0,1) | 1 299 · +0,5 (0,4) | 1,04 | 4/6 |
+| London ORB + trend SMA20 | +0,6 (0,4) | 899 · −1,3 (−1,1) | 0,89 | 2/6 |
+| **London ORB po dniu NR7** | **+3,3 (0,8)** | **184 · +4,0 (1,2)** | **1,28** | **5/6** |
+| Zakres azjatycki — wybicie | +3,0 (1,5) | 1 148 · −1,5 (−0,9) | 0,94 | 3/6 |
+| NY ORB (COMEX 08:20) | +0,4 (0,3) | 1 199 · −1,3 (−1,1) | 0,91 | 2/6 |
+| Kontynuacja Londyn → NY | +1,5 (0,4) | 235 · −8,3 (**−2,7**) | 0,60 | 2/6 |
+| Dryf sesji (long Azja) | +0,8 (0,7) | 1 333 · −1,3 (−1,4) | 0,90 | 1/6 |
+| Mean reversion od otwarcia Londynu | −7,5 (−2,5) | 257 · −4,4 (−1,6) | 0,78 | 1/6 |
+
+**Wnioski analityka**
+1. **Żadna strategia nie ma istotnej przewagi po kosztach.** Najlepszy kandydat — London ORB po dniu NR7 —
+   jest dodatni i w próbie, i poza nią, w 5 z 6 lat, ale t = 1,2 przy 184 transakcjach to wciąż zgodne z szumem.
+   Przewaga (+4 bps ≈ 0,7 USD/oz) znika przy koszcie ~1 USD/oz — u brokera ze spreadem 0,5+ USD jej nie ma.
+2. **Kontynuacja Londyn → NY jest istotnie ujemna poza próbą** (t = −2,7). To sugeruje *odwrócenie* ruchu
+   Londynu na otwarciu NY — ale ta hipoteza powstała po obejrzeniu wyników, więc wolno ją sprawdzić tylko
+   na nowych danych (2022-03 →). Zapisuję ją tu, zanim zobaczę te dane.
+3. Filtry „oczywiste” (trend SMA20) pogarszają wynik — typowy objaw dopasowania do szumu.
+
+**Decyzja dla bota:** `strategy/gold_orb.py` realizuje London ORB po NR7 **wyłącznie jako paper trading**
+(plan dnia + alert Discord + dziennik), na tym samym kodzie co backtest. Warunek przejścia na realne pieniądze:
+≥ 100 transakcji paper/live z wynikiem po kosztach w przedziale ufności badania i spread ≤ 0,40 USD/oz.
+
+```bash
+python -m research.intraday_lab --csv XAUUSD-m15.csv                  # pełne badanie (~10 min)
+python -m strategy.gold_orb --csv XAUUSD-m15.csv --paper 250           # replay
+python -m strategy.gold_orb --live --balance 100000 --risk-pct 0.5     # plan na dziś (GC=F z Yahoo)
+```
+
 ## Inne rynki
 
 Uruchom lokalnie dla aktualnych danych metali (Yahoo Finance):
