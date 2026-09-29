@@ -33,6 +33,12 @@ services:
       OANDA_TOKEN: ${OANDA_TOKEN:-}
       OANDA_ENV: ${OANDA_ENV:-practice}
       TAPE_CALENDAR_FEED: ${TAPE_CALENDAR_FEED:-}
+      TAPE_SMTP_HOST: ${TAPE_SMTP_HOST:-}
+      TAPE_SMTP_PORT: ${TAPE_SMTP_PORT:-587}
+      TAPE_SMTP_USER: ${TAPE_SMTP_USER:-}
+      TAPE_SMTP_PASSWORD: ${TAPE_SMTP_PASSWORD:-}
+      TAPE_MAIL_FROM: ${TAPE_MAIL_FROM:-}
+      TAPE_APP_URL: ${TAPE_APP_URL:-}
     depends_on:
       db:
         condition: service_healthy
@@ -52,6 +58,15 @@ services:
   sync:
     build: ./backend
     command: ["python", "-m", "tape.sync", "--every", "3600"]
+    environment: *api-env
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  reports:
+    build: ./backend
+    command: ["python", "-m", "tape.reports", "--every", "300"]
     environment: *api-env
     depends_on:
       db:

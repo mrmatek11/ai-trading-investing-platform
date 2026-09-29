@@ -11,6 +11,7 @@ import { ImportPage } from "./pages/Import";
 import { Playbooks } from "./pages/Playbooks";
 import { PortfolioPage } from "./pages/Portfolio";
 import { RiskPage } from "./pages/Risk";
+import { SettingsPage } from "./pages/Settings";
 import { Trades } from "./pages/Trades";
 import "./styles.css";
 
@@ -27,6 +28,7 @@ const routeTree = root.addChildren([
   createRoute({ getParentRoute: () => root, path: "/import", component: ImportPage }),
   createRoute({ getParentRoute: () => root, path: "/connections", component: ConnectionsPage }),
   createRoute({ getParentRoute: () => root, path: "/risk", component: RiskPage }),
+  createRoute({ getParentRoute: () => root, path: "/settings", component: SettingsPage }),
 ]);
 
 const router = createRouter({ routeTree });

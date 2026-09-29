@@ -25,6 +25,7 @@ research: [`../docs/RESEARCH.md`](../docs/RESEARCH.md).
 | Kalendarz makro USD | ✅ daty FOMC w kodzie, opcjonalnie tygodniowy feed albo CSV od admina; panel „7 dni” przy globusie, dane w pobliżu transakcji, segment „wejście ±30 min od ważnych danych” w statystykach i przeglądzie AI |
 | Wiele kont (rachunków) | ✅ każde połączenie MT5/IBKR i każda nazwa przy imporcie to osobny rachunek: osobna deduplikacja, osobne pozycje; przełącznik „Konto” w nagłówku filtruje journal, transakcje, portfel i ryzyko |
 | Limity prop na bieżąco | ✅ reguły zapisane dla konta; z EA Tape Sync 1.10 także wynik otwartych pozycji (equity, odczyt ≤ 15 min); zapas do dziennego limitu i max drawdownu NA DZIŚ (dzień w strefie firmy), karty na dashboardzie, czerwony pasek przy ≤25% zapasu lub złamaniu |
+| Raport tygodniowy i alerty e-mail | ✅ poniedziałek rano: wynik, najlepsza/najgorsza, koszt błędów, limity prop, dane USD (bez kosztu AI); alert limitu prop maks. raz dziennie na konto; podgląd w Ustawieniach; SMTP dowolnego dostawcy |
 | Szczegóły transakcji | ✅ wykres (Lightweight Charts) z IN/OUT/SL na cenach z `/api/prices`, wykonania, journal |
 | Playbooki i błędy | ✅ setupy z checklistą reguł, taksonomia błędów, wynik per setup i per błąd; ręczny SL → R dla MT5 |
 | Globus zdarzeń 3D | ✅ globe.gl: warstwy, XAU/XAG, obrót do wybranego zdarzenia, pierścienie dla nowych |
@@ -85,6 +86,7 @@ Zmienne środowiskowe:
 | `VITE_CLERK_PUBLISHABLE_KEY` | frontend: klucz publiczny Clerk; bez niego aplikacja działa bez logowania |
 | `TAPE_SECRET_KEYS` | klucze szyfrowania tokenów brokerów, `id:base64(32 B)`, pierwszy aktywny; bez nich połączenie IBKR jest wyłączone |
 | `TAPE_PRICE_PROVIDER` | `twelvedata` (+ `TWELVEDATA_API_KEY`), `oanda` (+ `OANDA_TOKEN`, `OANDA_ENV=practice`) albo `goldapi`; worker: `python -m tape.market --every 300 --backfill 2000` |
+| `TAPE_SMTP_HOST`, `TAPE_SMTP_PORT`, `TAPE_SMTP_USER`, `TAPE_SMTP_PASSWORD`, `TAPE_MAIL_FROM` | wysyłka e-maili (STARTTLS); bez nich worker `tape.reports` tylko loguje |
 | `ANTHROPIC_API_KEY` | klasyfikator newsów i propozycje mapowania CSV; bez klucza działają fallbacki |
 
 ## Stack

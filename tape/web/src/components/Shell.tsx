@@ -87,6 +87,8 @@ const COMMANDS: Record<string, string> = {
   CALC: "/risk",
   PROP: "/risk",
   SYNC: "/connections",
+  SET: "/settings",
+  SETTINGS: "/settings",
   PORT: "/portfolio",
   PORTFOLIO: "/portfolio",
   PF: "/portfolio",
@@ -162,6 +164,19 @@ export function Shell() {
           </Link>
         ))}
         <div className="flex-1" />
+        <Link
+          to="/settings"
+          aria-label="Ustawienia"
+          title="Ustawienia"
+          className="flex h-11 w-11 items-center justify-center rounded-md text-muted hover:text-fg"
+          activeProps={{ className: "bg-surface-2 !text-fg" }}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+            <path d="M4 7h10M18 7h2M4 17h4M12 17h8" />
+            <circle cx="16" cy="7" r="2" />
+            <circle cx="10" cy="17" r="2" />
+          </svg>
+        </Link>
         <button
           type="button"
           onClick={() => setPalette(palette === "standard" ? "colorblind" : "standard")}

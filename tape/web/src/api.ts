@@ -309,6 +309,8 @@ export type PropAccountStatus = {
   rules: { initial_balance: number; daily_loss_pct: number; max_drawdown_pct: number; drawdown_type: "static" | "trailing"; profit_target_pct: number | null; day_tz: string };
 };
 
+export type UserSettings = { email: string; weekly_report: boolean; prop_alerts: boolean; mail_configured: boolean };
+
 export type Book = { id: string; label: string; kind: "mt5_push" | "ibkr_flex" | "import"; has_trades: boolean };
 
 // null = wszystkie rachunki; "" to też rachunek (import z plików bez nazwy)
@@ -327,6 +329,9 @@ export const api = {
   journalMeta: () => get<{ mistakes: string[] }>("/api/journal/meta"),
   setups: (book: string | null = null) => get<Setup[]>(`/api/setups${bq(book)}`),
   books: () => get<Book[]>("/api/books"),
+  settings: () => get<UserSettings>("/api/settings"),
+  saveSettings: (body: Omit<UserSettings, "mail_configured">) => send<{ ok: boolean }>("PUT", "/api/settings", body),
+  weeklyPreview: () => get<{ subject: string; html: string; text: string }>("/api/reports/weekly/preview"),
   propAccounts: () => get<PropAccountStatus[]>("/api/prop/accounts"),
   savePropAccount: (body: PropInput & { book: string; name: string; day_tz: string }) => send<{ id: number }>("PUT", "/api/prop/accounts", body),
   deletePropAccount: (id: number) => send<{ ok: boolean }>("DELETE", `/api/prop/accounts/${id}`),

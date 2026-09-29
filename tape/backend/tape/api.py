@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from . import journal
-from . import econ_calendar, market, prop_accounts
+from . import econ_calendar, market, prop_accounts, reports, service
 from . import review as ai_review
 from . import sync as broker_sync
 from .auth import AuthError, Verifier, admin_subs, verifier_from_env
@@ -90,6 +90,12 @@ class PropAccountIn(PropRequest):
     name: str = Field(min_length=1, max_length=80)
 
 
+class SettingsIn(BaseModel):
+    email: str = Field("", max_length=254, pattern=r"^$|^[^@\s]+@[^@\s]+\.[^@\s]+$")
+    weekly_report: bool = True
+    prop_alerts: bool = True
+
+
 class IbkrConnectionIn(BaseModel):
     label: str = Field("Interactive Brokers", min_length=1, max_length=80)
     token: str = Field(min_length=8, max_length=200, pattern=r"^[A-Za-z0-9]+$")
@@ -147,16 +153,8 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
     app = FastAPI(title="Tape API", version="0.1.0", dependencies=[Depends(auth)])
 
     def positions_for(account: str, book: Optional[str] = None):
-        """Pozycje liczone osobno dla każdego rachunku — long na jednym koncie nie zamyka shorta na drugim."""
         with Session() as s:
-            items = []
-            for b, fills in load_fills_by_book(s, account, book or None).items():
-                for p in build_positions(fills):
-                    p.book = b
-                    items.append(p)
-            items.sort(key=lambda p: p.opened_at)
-            journal.apply_manual_stops(items, journal.entries_by_key(s, account))
-            return items
+            return service.load_positions(s, account, book)
 
     def position_dict(p, entry=None, setups=None):
         return {
@@ -633,6 +631,33 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
             rep = broker_sync.ingest_mt5(s, conn, payload)
             s.commit()
             return rep
+
+    # ---- ustawienia i raporty e-mail ----
+
+    @app.get("/api/settings")
+    def get_settings(account: str = Depends(current_account)):
+        with Session() as s:
+            st = s.get(reports.UserSettings, account)
+        return {"email": st.email if st else "", "weekly_report": st.weekly_report if st else True,
+                "prop_alerts": st.prop_alerts if st else True,
+                "mail_configured": reports.smtp_sender_from_env() is not None}
+
+    @app.put("/api/settings")
+    def save_settings(body: SettingsIn, account: str = Depends(current_account)):
+        with Session() as s:
+            st = s.get(reports.UserSettings, account) or reports.UserSettings(account=account)
+            st.email, st.weekly_report, st.prop_alerts = body.email.strip(), body.weekly_report, body.prop_alerts
+            s.add(st)
+            s.commit()
+        return {"ok": True}
+
+    @app.get("/api/reports/weekly/preview")
+    def weekly_preview(account: str = Depends(current_account)):
+        with Session() as s:
+            m = reports.weekly_report(s, account, datetime.now(timezone.utc), os.getenv("TAPE_APP_URL", ""))
+        if m is None:
+            raise HTTPException(status_code=404, detail="W ostatnich 7 dniach nie było zamkniętych transakcji")
+        return {"subject": m.subject, "html": m.html, "text": m.text}
 
     # ---- zapisane konta prop i alerty ----
 
