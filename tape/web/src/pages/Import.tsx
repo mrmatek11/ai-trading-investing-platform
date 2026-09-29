@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { api, type ImportReport, type Mapping, type SuggestResponse } from "../api";
 import { MappingStep } from "../components/MappingStep";
@@ -46,7 +47,10 @@ export function ImportPage() {
     <div className="mx-auto flex max-w-2xl flex-col gap-5 px-6 py-8">
       <div>
         <h1 className="text-xl font-semibold tracking-tight">Import transakcji</h1>
-        <p className="mt-1 text-muted">Ponowny import tego samego pliku nie tworzy duplikatów. Czas zapisujemy w UTC.</p>
+        <p className="mt-1 text-muted">
+          Ponowny import tego samego pliku nie tworzy duplikatów. Czas zapisujemy w UTC. MT5 i IBKR możesz też{" "}
+          <Link to="/connections" className="text-fg underline">połączyć na stałe</Link>.
+        </p>
       </div>
 
       <form

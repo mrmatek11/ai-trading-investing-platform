@@ -14,6 +14,7 @@ research: [`../docs/RESEARCH.md`](../docs/RESEARCH.md).
 | Import XTB (zamknięte pozycje, XLSX/CSV) | ✅ czas Europe/Warsaw → UTC, SL, wielkość kontraktu z P/L brokera |
 | Import MetaTrader 5 (Deals, CSV/XLSX) | ✅ czas serwera → UTC (domyślnie UTC+2, do zmiany) |
 | Import IBKR Flex (XML) | ✅ futures GC/SI/MGC z mnożnikiem, prowizje, FIFO P/L brokera; bezpieczny parser XML; klient Flex Web Service |
+| Automatyczna synchronizacja | ✅ MT5 przez EA „Tape Sync” (token połączenia, w bazie tylko hash); IBKR Flex Web Service co godzinę (token szyfrowany AES-256-GCM, envelope, rotacja kluczy) |
 | Import dowolnego CSV z mapowaniem kolumn | ✅ kreator: heurystyka (bez AI) albo propozycja Claude, podgląd, zatwierdzenie |
 | Silnik pozycji | ✅ FIFO na `Decimal`, dokładki, częściowe zamknięcia, odwrócenia, R z initial SL |
 | Statystyki | ✅ PnL, win rate, PF, drawdown, t-stat, segmenty z testem istotności (w tym „po stracie”) |
@@ -45,6 +46,8 @@ npm run build                                            # typecheck + build pro
 # pipeline newsów w trybie shadow (np. co 15 min); wymaga ANTHROPIC_API_KEY
 cd tape/backend
 python -m tape.news.pipeline --every 900
+# synchronizacja kont IBKR (np. co godzinę); wymaga TAPE_SECRET_KEYS
+python -m tape.sync --every 3600
 # ceny do liczenia trafności (CSV: timestamp, close)
 curl -F file=@xauusd_h1.csv -F asset=XAU http://127.0.0.1:8000/api/prices
 ```
@@ -73,6 +76,7 @@ Zmienne środowiskowe:
 | `TAPE_AUTH_AUDIENCE` | opcjonalnie, gdy dostawca ustawia `aud` |
 | `TAPE_ADMIN_SUBS` | identyfikatory użytkowników-administratorów (wgrywanie cen), po przecinku |
 | `VITE_CLERK_PUBLISHABLE_KEY` | frontend: klucz publiczny Clerk; bez niego aplikacja działa bez logowania |
+| `TAPE_SECRET_KEYS` | klucze szyfrowania tokenów brokerów, `id:base64(32 B)`, pierwszy aktywny; bez nich połączenie IBKR jest wyłączone |
 | `ANTHROPIC_API_KEY` | klasyfikator newsów i propozycje mapowania CSV; bez klucza działają fallbacki |
 
 ## Stack

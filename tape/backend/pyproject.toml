@@ -13,6 +13,7 @@ dependencies = [
     "anthropic>=1.0",
     "pyjwt[crypto]>=2.8",
     "defusedxml>=0.7",
+    "cryptography>=42",
 ]
 
 [project.optional-dependencies]

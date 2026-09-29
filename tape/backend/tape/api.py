@@ -1,7 +1,8 @@
 """HTTP API Tape (FastAPI).
 
-MVP jednego użytkownika: konto „default”, opcjonalny token TAPE_API_TOKEN (nagłówek Authorization: Bearer).
-Logowanie użytkowników (Clerk, JWT) wchodzi w kolejnym kroku — zob. PRODUCT_SPEC.md 6.5.
+Konto pochodzi wyłącznie z uwierzytelnienia: JWT (Clerk/OIDC) gdy skonfigurowano TAPE_AUTH_JWKS_URL,
+w przeciwnym razie tryb jednego użytkownika („default”, opcjonalny TAPE_API_TOKEN).
+Wyjątek: /api/ingest/mt5 uwierzytelnia token połączenia EA „Tape Sync”.
 
 Uruchomienie: uvicorn tape.api:create_app --factory --reload
 """
@@ -20,6 +21,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from . import journal
+from . import sync as broker_sync
 from .auth import AuthError, Verifier, admin_subs, verifier_from_env
 from .db import ImportRow, load_fills, make_sessionmaker, store_fills
 from .engine import prop, risk, stats
@@ -29,8 +31,10 @@ from .news import store as news_store
 from .news import track_record
 from .news.bias import aggregate, event_to_dict
 from .news.sample import sample_events
+from .secretbox import SecretBox
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+PUBLIC_PATHS = {"/api/health", "/api/ingest/mt5"}
 
 
 class SizeRequest(BaseModel):
@@ -69,6 +73,17 @@ class PropRequest(BaseModel):
     day_tz: str = "Europe/Prague"
 
 
+class IbkrConnectionIn(BaseModel):
+    label: str = Field("Interactive Brokers", min_length=1, max_length=80)
+    token: str = Field(min_length=8, max_length=200, pattern=r"^[A-Za-z0-9]+$")
+    query_id: str = Field(min_length=1, max_length=20, pattern=r"^[0-9]+$")
+    tz: str = Field("", max_length=64)
+
+
+class Mt5ConnectionIn(BaseModel):
+    label: str = Field("MetaTrader 5", min_length=1, max_length=80)
+
+
 def default_ai_client():
     """Klient Claude tylko gdy skonfigurowano klucz — bez niego funkcje AI mają działający fallback."""
     if not os.getenv("ANTHROPIC_API_KEY"):
@@ -78,8 +93,10 @@ def default_ai_client():
     return anthropic.Anthropic()
 
 
-def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Optional[Verifier] = None) -> FastAPI:
+def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Optional[Verifier] = None,
+               secret_box: Optional[SecretBox] = None, flex_fetch=None) -> FastAPI:
     Session = make_sessionmaker(database_url)
+    box = secret_box if secret_box is not None else SecretBox.from_env()
     ai = ai_client if ai_client is not None else default_ai_client()
     token = os.getenv("TAPE_API_TOKEN", "")
     verify = verifier if verifier is not None else verifier_from_env()
@@ -89,8 +106,8 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
         # Konto zawsze z uwierzytelnienia, nigdy z parametrów żądania.
         request.state.account = "default"
         request.state.is_admin = verify is None          # tryb jednego użytkownika: właściciel = admin
-        if request.url.path == "/api/health":
-            return
+        if request.url.path in PUBLIC_PATHS:
+            return                                        # health; ingest MT5 ma własny token połączenia
         header = request.headers.get("authorization", "")
         if verify is not None:
             if not header.startswith("Bearer "):
@@ -346,6 +363,85 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
                                    "passed_day": v.passed_day.isoformat() if v.passed_day else None}
                                for k, v in sims.items()},
                 "note": "Liczone na saldzie po zamknięciu transakcji; firmy liczą też equity z otwartymi pozycjami."}
+
+    # ---- połączenia z brokerami (automatyczna synchronizacja) ----
+
+    def own_connection(s, account: str, conn_id: str):
+        conn = s.get(broker_sync.Connection, conn_id)
+        if conn is None or conn.account != account:
+            raise HTTPException(status_code=404, detail="Nie ma takiego połączenia")
+        return conn
+
+    @app.get("/api/connections")
+    def list_connections(account: str = Depends(current_account)):
+        with Session() as s:
+            rows = s.scalars(select(broker_sync.Connection).where(broker_sync.Connection.account == account)
+                             .order_by(broker_sync.Connection.created_at))
+            return {"connections": [broker_sync.to_dict(c) for c in rows], "encryption": box is not None}
+
+    @app.post("/api/connections/ibkr", status_code=201)
+    def create_ibkr_connection(body: IbkrConnectionIn, account: str = Depends(current_account)):
+        if box is None:
+            raise HTTPException(status_code=503, detail="Serwer nie ma klucza szyfrowania (TAPE_SECRET_KEYS) — "
+                                                        "nie zapiszemy tokenu brokera jawnym tekstem.")
+        if body.tz:
+            try:
+                from zoneinfo import ZoneInfo
+                ZoneInfo(body.tz)
+            except Exception as exc:
+                raise HTTPException(status_code=400, detail=f"Nieznana strefa czasowa: {body.tz}") from exc
+        with Session() as s:
+            conn = broker_sync.create_ibkr(s, box, account, body.label.strip(), body.token, body.query_id, body.tz)
+            s.commit()
+            return broker_sync.to_dict(conn)
+
+    @app.post("/api/connections/mt5", status_code=201)
+    def create_mt5_connection(body: Mt5ConnectionIn, account: str = Depends(current_account)):
+        with Session() as s:
+            conn, tok = broker_sync.create_mt5(s, account, body.label.strip())
+            s.commit()
+            # token pokazujemy tylko raz — w bazie jest wyłącznie jego hash
+            return {**broker_sync.to_dict(conn), "token": tok}
+
+    @app.post("/api/connections/{conn_id}/sync")
+    def sync_connection(conn_id: str, account: str = Depends(current_account)):
+        with Session() as s:
+            conn = own_connection(s, account, conn_id)
+            if conn.kind != "ibkr_flex":
+                raise HTTPException(status_code=400, detail="MT5 wysyła dane sam (EA Tape Sync)")
+            now = datetime.now(timezone.utc)
+            if conn.last_sync_at and now - conn.last_sync_at < broker_sync.MANUAL_COOLDOWN:
+                raise HTTPException(status_code=429, detail="IBKR ogranicza liczbę zapytań — spróbuj za 2 minuty")
+            rep = broker_sync.sync_ibkr(s, conn, box, flex_fetch, now)
+            s.commit()
+            return {**rep, "connection": broker_sync.to_dict(conn)}
+
+    @app.delete("/api/connections/{conn_id}")
+    def delete_connection(conn_id: str, account: str = Depends(current_account)):
+        with Session() as s:
+            s.delete(own_connection(s, account, conn_id))   # usuwa też zaszyfrowany token / hash
+            s.commit()
+        return {"ok": True}
+
+    @app.post("/api/ingest/mt5")
+    async def ingest_mt5(request: Request):
+        """Endpoint dla EA „Tape Sync” — uwierzytelnienie tokenem połączenia, nie sesją użytkownika."""
+        header = request.headers.get("authorization", "")
+        tok = header[len("Bearer "):] if header.startswith("Bearer ") else ""
+        raw = await request.body()
+        if len(raw) > MAX_UPLOAD_BYTES:
+            raise HTTPException(status_code=413, detail="Za duża paczka — wyślij mniej transakcji naraz")
+        with Session() as s:
+            conn = broker_sync.connection_for_token(s, tok) if tok else None
+            if conn is None:
+                raise HTTPException(status_code=401, detail="Niepoprawny token połączenia")
+            try:
+                payload = broker_sync.Mt5Payload.model_validate_json(raw)
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=f"Niepoprawne dane: {str(exc)[:300]}") from exc
+            rep = broker_sync.ingest_mt5(s, conn, payload)
+            s.commit()
+            return rep
 
     def current_events(now: datetime):
         """Zdarzenia z pipeline'u newsów; dopóki go nie uruchomiono — przykładowe (oznaczone)."""

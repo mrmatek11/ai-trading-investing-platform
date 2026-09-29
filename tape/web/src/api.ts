@@ -187,6 +187,20 @@ export type PropResponse = {
   note: string;
 };
 
+export type Connection = {
+  id: string;
+  kind: "ibkr_flex" | "mt5_push";
+  label: string;
+  tz: string;
+  created_at: string;
+  last_sync_at: string | null;
+  last_status: "never" | "ok" | "partial" | "error";
+  last_new: number;
+  last_error: string;
+};
+
+export type SyncReport = { new: number; duplicates: number; errors: string[]; connection: Connection };
+
 // Token logowania (Clerk) — ustawiany przez AuthGate; w trybie jednego użytkownika brak.
 let tokenProvider: (() => Promise<string | null>) | null = null;
 
@@ -244,6 +258,12 @@ export const api = {
   createSetup: (body: SetupInput) => send<{ id: number }>("POST", "/api/setups", body),
   updateSetup: (id: number, body: SetupInput) => send<{ ok: boolean }>("PUT", `/api/setups/${id}`, body),
   deleteSetup: (id: number) => send<{ ok: boolean }>("DELETE", `/api/setups/${id}`),
+  connections: () => get<{ connections: Connection[]; encryption: boolean }>("/api/connections"),
+  addIbkr: (body: { label: string; token: string; query_id: string; tz: string }) =>
+    send<Connection>("POST", "/api/connections/ibkr", body),
+  addMt5: (label: string) => send<Connection & { token: string }>("POST", "/api/connections/mt5", { label }),
+  syncConnection: (id: string) => send<SyncReport>("POST", `/api/connections/${encodeURIComponent(id)}/sync`),
+  deleteConnection: (id: string) => send<{ ok: boolean }>("DELETE", `/api/connections/${encodeURIComponent(id)}`),
   async suggestMapping(file: File): Promise<SuggestResponse> {
     const body = new FormData();
     body.append("file", file);

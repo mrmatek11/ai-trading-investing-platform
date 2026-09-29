@@ -4,6 +4,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { AuthGate } from "./auth";
 import { Shell } from "./components/Shell";
+import { ConnectionsPage } from "./pages/Connections";
 import { Dashboard } from "./pages/Dashboard";
 import { ImportPage } from "./pages/Import";
 import { Playbooks } from "./pages/Playbooks";
@@ -21,6 +22,7 @@ const routeTree = root.addChildren([
   // Globus (three.js) ładowany osobno — journal nie czeka na ~2 MB grafiki 3D.
   createRoute({ getParentRoute: () => root, path: "/globe", component: lazyRouteComponent(() => import("./pages/Globe"), "GlobePage") }),
   createRoute({ getParentRoute: () => root, path: "/import", component: ImportPage }),
+  createRoute({ getParentRoute: () => root, path: "/connections", component: ConnectionsPage }),
   createRoute({ getParentRoute: () => root, path: "/risk", component: RiskPage }),
 ]);
 

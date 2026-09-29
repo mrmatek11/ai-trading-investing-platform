@@ -1,5 +1,6 @@
 # Lokalnie / na jednym serwerze:  docker compose up --build   →  http://localhost:8080
 # Worker newsów (wymaga ANTHROPIC_API_KEY):  docker compose --profile news up -d
+# Worker `sync` co godzinę pobiera raporty IBKR Flex (wymaga TAPE_SECRET_KEYS).
 services:
   db:
     image: postgres:16-alpine
@@ -25,6 +26,7 @@ services:
       TAPE_AUTH_AUTHORIZED_PARTIES: ${TAPE_AUTH_AUTHORIZED_PARTIES:-}
       TAPE_ADMIN_SUBS: ${TAPE_ADMIN_SUBS:-}
       TAPE_API_TOKEN: ${TAPE_API_TOKEN:-}
+      TAPE_SECRET_KEYS: ${TAPE_SECRET_KEYS:-}
     depends_on:
       db:
         condition: service_healthy
@@ -39,6 +41,15 @@ services:
       - "8080:80"
     depends_on:
       - api
+    restart: unless-stopped
+
+  sync:
+    build: ./backend
+    command: ["python", "-m", "tape.sync", "--every", "3600"]
+    environment: *api-env
+    depends_on:
+      db:
+        condition: service_healthy
     restart: unless-stopped
 
   news:
