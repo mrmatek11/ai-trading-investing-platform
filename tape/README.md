@@ -48,6 +48,19 @@ python -m tape.news.pipeline --every 900
 curl -F file=@xauusd_h1.csv -F asset=XAU http://127.0.0.1:8000/api/prices
 ```
 
+### Docker (produkcja na jednym serwerze)
+
+```bash
+cd tape
+cp .env.example .env        # uzupełnij hasło bazy, klucze Clerk / Anthropic
+docker compose up -d --build                  # PostgreSQL + API + frontend (nginx) → http://localhost:8080
+docker compose --profile news up -d           # + worker newsów co 15 min (wymaga ANTHROPIC_API_KEY)
+```
+
+nginx serwuje frontend, przekazuje `/api` do API i dodaje nagłówki bezpieczeństwa. HTTPS zapewnij
+przed nim (Caddy, Cloudflare, load balancer). CI (`.github/workflows/ci.yml`) uruchamia testy bota,
+testy backendu na SQLite i PostgreSQL, build frontendu i build obrazów.
+
 Zmienne środowiskowe:
 
 | Zmienna | Znaczenie |

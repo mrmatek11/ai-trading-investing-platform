@@ -1,0 +1,55 @@
+# Lokalnie / na jednym serwerze:  docker compose up --build   →  http://localhost:8080
+# Worker newsów (wymaga ANTHROPIC_API_KEY):  docker compose --profile news up -d
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: tape
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tape-local-only}
+      POSTGRES_DB: tape
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tape -d tape"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build: ./backend
+    environment: &api-env
+      DATABASE_URL: postgresql+psycopg://tape:${POSTGRES_PASSWORD:-tape-local-only}@db:5432/tape
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      TAPE_AUTH_JWKS_URL: ${TAPE_AUTH_JWKS_URL:-}
+      TAPE_AUTH_ISSUER: ${TAPE_AUTH_ISSUER:-}
+      TAPE_AUTH_AUTHORIZED_PARTIES: ${TAPE_AUTH_AUTHORIZED_PARTIES:-}
+      TAPE_ADMIN_SUBS: ${TAPE_ADMIN_SUBS:-}
+      TAPE_API_TOKEN: ${TAPE_API_TOKEN:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./web
+      args:
+        VITE_CLERK_PUBLISHABLE_KEY: ${VITE_CLERK_PUBLISHABLE_KEY:-}
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  news:
+    build: ./backend
+    command: ["python", "-m", "tape.news.pipeline", "--every", "900"]
+    environment: *api-env
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    profiles: ["news"]
+
+volumes:
+  db-data:
