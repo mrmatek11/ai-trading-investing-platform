@@ -113,7 +113,7 @@ def make_sessionmaker(url: str | None = None) -> sessionmaker:
     kwargs = {"connect_args": {"check_same_thread": False}} if url.startswith("sqlite") else {}
     engine = create_engine(url, **kwargs)
     from . import journal  # noqa: F401 — rejestruje tabele journala
-    from . import review, sync  # noqa: F401 — przeglądy AI, połączenia z brokerami
+    from . import market, review, sync  # noqa: F401 — ceny, przeglądy AI, połączenia z brokerami
     from .news import store  # noqa: F401 — rejestruje tabele newsów w metadanych
     Base.metadata.create_all(engine)
     return sessionmaker(engine, expire_on_commit=False)

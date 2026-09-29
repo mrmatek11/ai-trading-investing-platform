@@ -1,5 +1,6 @@
 # Lokalnie / na jednym serwerze:  docker compose up --build   →  http://localhost:8080
 # Worker newsów (wymaga ANTHROPIC_API_KEY):  docker compose --profile news up -d
+# Ceny XAU/XAG (wymaga TAPE_PRICE_PROVIDER):  docker compose --profile prices up -d
 # Worker `sync` co godzinę pobiera raporty IBKR Flex (wymaga TAPE_SECRET_KEYS).
 services:
   db:
@@ -27,6 +28,10 @@ services:
       TAPE_ADMIN_SUBS: ${TAPE_ADMIN_SUBS:-}
       TAPE_API_TOKEN: ${TAPE_API_TOKEN:-}
       TAPE_SECRET_KEYS: ${TAPE_SECRET_KEYS:-}
+      TAPE_PRICE_PROVIDER: ${TAPE_PRICE_PROVIDER:-}
+      TWELVEDATA_API_KEY: ${TWELVEDATA_API_KEY:-}
+      OANDA_TOKEN: ${OANDA_TOKEN:-}
+      OANDA_ENV: ${OANDA_ENV:-practice}
     depends_on:
       db:
         condition: service_healthy
@@ -51,6 +56,16 @@ services:
       db:
         condition: service_healthy
     restart: unless-stopped
+
+  prices:
+    build: ./backend
+    command: ["python", "-m", "tape.market", "--every", "300", "--backfill", "2000"]
+    environment: *api-env
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    profiles: ["prices"]
 
   news:
     build: ./backend

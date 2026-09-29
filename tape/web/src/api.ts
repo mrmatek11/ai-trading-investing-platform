@@ -187,6 +187,8 @@ export type PropResponse = {
   note: string;
 };
 
+export type Quote = { asset: "XAU" | "XAG"; price: number; ts: string; age_minutes: number; change_24h: number | null; provider: string };
+
 export type ReviewFinding = { title: string; detail: string; facts: string[] };
 
 export type AiReview = {
@@ -300,6 +302,7 @@ export const api = {
   createSetup: (body: SetupInput) => send<{ id: number }>("POST", "/api/setups", body),
   updateSetup: (id: number, body: SetupInput) => send<{ ok: boolean }>("PUT", `/api/setups/${id}`, body),
   deleteSetup: (id: number) => send<{ ok: boolean }>("DELETE", `/api/setups/${id}`),
+  quotes: () => get<Quote[]>("/api/market/quotes"),
   review: () => get<ReviewState>("/api/review"),
   generateReview: () => send<AiReview>("POST", "/api/review"),
   portfolio: () => get<Portfolio>("/api/portfolio"),

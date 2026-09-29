@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from . import journal
+from . import market
 from . import review as ai_review
 from . import sync as broker_sync
 from .auth import AuthError, Verifier, admin_subs, verifier_from_env
@@ -374,6 +375,11 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
                                for k, v in sims.items()},
                 "note": "Liczone na saldzie po zamknięciu transakcji; firmy liczą też equity z otwartymi pozycjami."}
 
+    @app.get("/api/market/quotes")
+    def market_quotes():
+        with Session() as s:
+            return market.quotes(s, datetime.now(timezone.utc))
+
     # ---- przegląd AI ----
 
     def review_inputs(account: str):
@@ -429,7 +435,7 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
         items = positions_for(account)
         with Session() as s:
             rows = load_cash_flows(s, account)
-            marks = {a: m for a in ("XAU", "XAG") if (m := news_store.latest_price(s, a))}
+            marks = {a: m for a in ("XAU", "XAG") if (m := market.mark(s, a))}
         flows = [portfolio.Flow(f.ts, f.amount) for f in rows]
         rep = portfolio.report(items, flows, marks)
         f = lambda d: None if d is None else float(round(d, 2))  # noqa: E731
