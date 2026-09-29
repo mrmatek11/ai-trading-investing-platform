@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from typing import Optional
 
-from . import generic, ibkr, mt5, xtb
+from . import ctrader, generic, ibkr, mt5, xtb
 from .base import Fill, ImportResult, read_rows
 
-BROKERS = {"xtb": xtb, "mt5": mt5}
+BROKERS = {"xtb": xtb, "mt5": mt5, "ctrader": ctrader}
 
 
 def detect_broker(data: bytes, filename: str) -> Optional[str]:

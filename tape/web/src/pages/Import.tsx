@@ -9,6 +9,7 @@ const BROKERS = [
   { value: "xtb", label: "XTB · zamknięte pozycje (XLSX/CSV)" },
   { value: "mt5", label: "MetaTrader 5 · lista transakcji (Deals)" },
   { value: "ibkr", label: "Interactive Brokers · raport Flex (XML)" },
+  { value: "ctrader", label: "cTrader · historia pozycji (CSV/XLSX)" },
   { value: "custom", label: "Inny broker — dopasuj kolumny" },
 ];
 
@@ -16,6 +17,7 @@ const TZ_HINT: Record<string, string> = {
   xtb: "Europe/Warsaw",
   mt5: "Etc/GMT-2",
   ibkr: "America/New_York",
+  ctrader: "UTC (albo z nagłówka)",
 };
 
 export function ImportPage() {
@@ -65,7 +67,7 @@ export function ImportPage() {
       >
         <label className="flex flex-col gap-2 rounded-md border border-dashed border-[#34343a] p-6 text-center hover:border-muted">
           <span>{file ? file.name : "Wybierz plik z historią transakcji"}</span>
-          <span className="text-xs text-muted">CSV · XLSX · XML — XTB, MetaTrader 5, IBKR Flex</span>
+          <span className="text-xs text-muted">CSV · XLSX · XML — XTB, MetaTrader 5, cTrader, IBKR Flex</span>
           <input
             type="file"
             accept=".csv,.xlsx,.xlsm,.txt,.xml"

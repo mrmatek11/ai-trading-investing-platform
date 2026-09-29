@@ -12,6 +12,7 @@ research: [`../docs/RESEARCH.md`](../docs/RESEARCH.md).
 | Obszar | Stan |
 |--------|------|
 | Import XTB (zamknięte pozycje, XLSX/CSV) | ✅ czas Europe/Warsaw → UTC, SL, wielkość kontraktu z P/L brokera |
+| Import cTrader (historia pozycji, CSV/XLSX) | ✅ strefa czasowa z nagłówka (UTC±h), ilość w lotach albo uncjach |
 | Import MetaTrader 5 (Deals, CSV/XLSX) | ✅ czas serwera → UTC (domyślnie UTC+2, do zmiany) |
 | Import IBKR Flex (XML) | ✅ futures GC/SI/MGC z mnożnikiem, prowizje, FIFO P/L brokera; bezpieczny parser XML; klient Flex Web Service |
 | Automatyczna synchronizacja | ✅ MT5 przez EA „Tape Sync” (token połączenia, w bazie tylko hash); IBKR Flex Web Service co godzinę (token szyfrowany AES-256-GCM, envelope, rotacja kluczy) |
