@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { api, type Segment } from "../api";
 import { useBook } from "../book";
 import { AiReview } from "../components/AiReview";
+import { AnalystPanel } from "../components/analytics/AnalystPanel";
 import { EquityChart } from "../components/EquityChart";
 import { PropLimits } from "../components/PropLimits";
 import { money, num, pct, r, tone, when } from "../format";
@@ -87,10 +88,12 @@ export function Dashboard() {
         <EquityChart points={stats.data!.equity} />
       </section>
 
+      <AnalystPanel a={stats.data!.analytics} s={s} />
+
       <AiReview />
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <section aria-label="Ostatnie transakcje" className="rounded-md border border-line lg:col-span-2">
+        <section aria-label="Ostatnie transakcje" className="min-w-0 rounded-md border border-line lg:col-span-2">
           <div className="flex items-center border-b border-line px-4 py-3">
             <h2 className="text-[13px] font-medium">Ostatnie transakcje</h2>
             <div className="flex-1" />
@@ -98,7 +101,8 @@ export function Dashboard() {
               Wszystkie →
             </Link>
           </div>
-          <table className="w-full text-[12px]">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[440px] text-[12px]">
             <thead className="text-muted">
               <tr className="border-b border-line">
                 <th className="px-4 py-2 text-left font-normal">Zamknięcie</th>
@@ -122,9 +126,10 @@ export function Dashboard() {
               ))}
             </tbody>
           </table>
+          </div>
         </section>
 
-        <div className="flex flex-col gap-4">
+        <div className="flex min-w-0 flex-col gap-4">
         <section aria-label="Wnioski" className="rounded-md border border-line px-4 py-3">
           <h2 className="mb-1 text-[13px] font-medium">Wnioski</h2>
           {insights.length ? (

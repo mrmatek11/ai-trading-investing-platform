@@ -28,7 +28,7 @@ from . import sync as broker_sync
 from .auth import AuthError, Verifier, admin_subs, verifier_from_env
 from .db import (CashFlowRow, ImportRow, books as list_books, load_cash_flows, load_fills, load_fills_by_book,
                  make_sessionmaker, store_cash_flows, store_fills)
-from .engine import portfolio, prop, risk, stats
+from .engine import analytics, portfolio, prop, risk, stats
 from .engine.positions import build_positions
 from .importers import BROKERS, generic, parse_file
 from .news import store as news_store
@@ -365,6 +365,7 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
             "summary": stats.as_dict(stats.summarize(items)),
             "equity": stats.equity_curve(items),
             "segments": [stats.as_dict(x) for x in stats.segments(items, news_times(items))],
+            "analytics": analytics.analytics(items),
         }
 
     @app.post("/api/tools/position-size")

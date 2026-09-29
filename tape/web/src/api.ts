@@ -28,12 +28,37 @@ export type Segment = {
 
 export type GroupStats = { key: string; trades: number; net_pnl: number; win_rate: number; avg_pnl: number; avg_r: number | null };
 
+export type Analytics = {
+  trades: number;
+  expectancy: number | null;
+  avg_win: number | null;
+  avg_loss: number | null;
+  payoff: number | null;
+  breakeven_win_rate: number | null;
+  largest_win: number | null;
+  largest_loss: number | null;
+  streaks: { max_wins: number; max_losses: number; current: number };
+  drawdown: { max: number; current: number; longest_days: number; underwater_days: number };
+  trading_days: number;
+  green_days: number;
+  best_day: number | null;
+  worst_day: number | null;
+  sharpe_daily: number | null;
+  sortino_daily: number | null;
+  daily: { day: string; pnl: number; trades: number }[];
+  by_hour: { hour: number; trades: number; pnl: number }[];
+  by_weekday: { weekday: number; trades: number; pnl: number }[];
+  r_hist: { label: string; mid: number; count: number }[] | null;
+  rolling: { window: number; points: { t: string; expectancy: number }[] };
+};
+
 export type Stats = {
   setups: GroupStats[];
   mistakes: GroupStats[];
   summary: Summary;
   equity: { t: string; equity: number }[];
   segments: Segment[];
+  analytics: Analytics;
 };
 
 export type Position = {
