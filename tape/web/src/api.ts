@@ -187,6 +187,22 @@ export type PropResponse = {
   note: string;
 };
 
+export type ReviewFinding = { title: string; detail: string; facts: string[] };
+
+export type AiReview = {
+  headline: string;
+  strengths: ReviewFinding[];
+  leaks: ReviewFinding[];
+  actions: { text: string; facts: string[] }[];
+  caveat: string;
+  dropped: number;
+  created_at: string;
+  stale: boolean;
+  facts: { id: string; text: string }[];
+};
+
+export type ReviewState = { ai_available: boolean; trades: number; min_trades: number; review: AiReview | null };
+
 export type CashFlowItem = { id: number; ts: string; amount: number; currency: string; note: string; source: string };
 
 export type Portfolio = {
@@ -284,6 +300,8 @@ export const api = {
   createSetup: (body: SetupInput) => send<{ id: number }>("POST", "/api/setups", body),
   updateSetup: (id: number, body: SetupInput) => send<{ ok: boolean }>("PUT", `/api/setups/${id}`, body),
   deleteSetup: (id: number) => send<{ ok: boolean }>("DELETE", `/api/setups/${id}`),
+  review: () => get<ReviewState>("/api/review"),
+  generateReview: () => send<AiReview>("POST", "/api/review"),
   portfolio: () => get<Portfolio>("/api/portfolio"),
   addCashFlow: (body: { ts: string; amount: number; currency: string; note: string }) =>
     send<CashFlowItem>("POST", "/api/cashflows", body),

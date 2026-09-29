@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from . import journal
+from . import review as ai_review
 from . import sync as broker_sync
 from .auth import AuthError, Verifier, admin_subs, verifier_from_env
 from .db import CashFlowRow, ImportRow, load_cash_flows, load_fills, make_sessionmaker, store_cash_flows, store_fills
@@ -372,6 +373,50 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
                                    "passed_day": v.passed_day.isoformat() if v.passed_day else None}
                                for k, v in sims.items()},
                 "note": "Liczone na saldzie po zamknięciu transakcji; firmy liczą też equity z otwartymi pozycjami."}
+
+    # ---- przegląd AI ----
+
+    def review_inputs(account: str):
+        items = positions_for(account)
+        with Session() as s:
+            facts = ai_review.build_facts(items, journal.entries_by_key(s, account), load_setups(s, account))
+        closed = sum(1 for p in items if not p.is_open)
+        return facts, ai_review.facts_hash(facts), closed
+
+    @app.get("/api/review")
+    def get_review(account: str = Depends(current_account)):
+        facts, h, closed = review_inputs(account)
+        with Session() as s:
+            row = ai_review.latest(s, account)
+        return {"ai_available": ai is not None, "trades": closed, "min_trades": ai_review.MIN_TRADES,
+                "review": ai_review.to_dict(row, facts, h) if row else None}
+
+    @app.post("/api/review")
+    def create_review(account: str = Depends(current_account)):
+        if ai is None:
+            raise HTTPException(status_code=503, detail="AI nie jest skonfigurowane (ANTHROPIC_API_KEY)")
+        facts, h, closed = review_inputs(account)
+        if closed < ai_review.MIN_TRADES:
+            raise HTTPException(status_code=400, detail=f"Potrzeba co najmniej {ai_review.MIN_TRADES} zamkniętych transakcji")
+        with Session() as s:
+            row = ai_review.latest(s, account)
+            if row and row.facts_hash == h:
+                return ai_review.to_dict(row, facts, h)          # dane bez zmian — nie płacimy drugi raz
+            now = datetime.now(timezone.utc)
+            if row and now - row.created_at < timedelta(minutes=5):
+                raise HTTPException(status_code=429, detail="Nowy przegląd możesz wygenerować za kilka minut")
+        try:
+            out = ai_review.generate(ai, facts)
+        except Exception as exc:  # błąd API/sieci — nie zapisujemy niczego
+            raise HTTPException(status_code=502, detail=f"AI chwilowo niedostępne ({type(exc).__name__})") from exc
+        if out is None:
+            raise HTTPException(status_code=502, detail="AI nie przygotowało przeglądu — spróbuj ponownie później")
+        with Session() as s:
+            row = ai_review.ReviewRow(account=account, facts_hash=h, model=ai_review.MODEL,
+                                      payload={**out, "facts_snapshot": facts})
+            s.add(row)
+            s.commit()
+            return ai_review.to_dict(row, facts, h)
 
     # ---- portfel ----
 

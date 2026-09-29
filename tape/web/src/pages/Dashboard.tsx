@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { api, type Segment } from "../api";
+import { AiReview } from "../components/AiReview";
 import { EquityChart } from "../components/EquityChart";
 import { money, num, pct, r, tone, when } from "../format";
 
@@ -79,6 +80,8 @@ export function Dashboard() {
         </div>
         <EquityChart points={stats.data!.equity} />
       </section>
+
+      <AiReview />
 
       <div className="grid gap-4 lg:grid-cols-3">
         <section aria-label="Ostatnie transakcje" className="rounded-md border border-line lg:col-span-2">
