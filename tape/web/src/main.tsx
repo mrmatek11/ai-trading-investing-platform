@@ -3,6 +3,7 @@ import { createRootRoute, createRoute, createRouter, lazyRouteComponent, RouterP
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { AuthGate } from "./auth";
+import { BookProvider } from "./book";
 import { Shell } from "./components/Shell";
 import { ConnectionsPage } from "./pages/Connections";
 import { Dashboard } from "./pages/Dashboard";
@@ -42,7 +43,9 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <AuthGate>
-        <RouterProvider router={router} />
+        <BookProvider>
+          <RouterProvider router={router} />
+        </BookProvider>
       </AuthGate>
     </QueryClientProvider>
   </StrictMode>,

@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { api, type Segment } from "../api";
+import { useBook } from "../book";
 import { AiReview } from "../components/AiReview";
 import { EquityChart } from "../components/EquityChart";
 import { money, num, pct, r, tone, when } from "../format";
@@ -40,8 +41,9 @@ function Kpi({ label, value, className = "" }: { label: string; value: string; c
 }
 
 export function Dashboard() {
-  const stats = useQuery({ queryKey: ["stats"], queryFn: api.stats });
-  const positions = useQuery({ queryKey: ["positions"], queryFn: api.positions });
+  const { book } = useBook();
+  const stats = useQuery({ queryKey: ["stats", book], queryFn: () => api.stats(book) });
+  const positions = useQuery({ queryKey: ["positions", book], queryFn: () => api.positions(book) });
 
   if (stats.isLoading) return <div className="p-6 text-muted">Ładowanie…</div>;
   if (stats.isError) return <div className="p-6 text-neg">Nie udało się pobrać statystyk: {String(stats.error)}</div>;

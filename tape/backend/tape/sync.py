@@ -114,8 +114,8 @@ def sync_ibkr(session: Session, conn: Connection, box: Optional[SecretBox], fetc
         result = ibkr.parse(data, "flex.xml", tz=conn.tz or "America/New_York")
         if not result.fills and result.errors:
             raise ValueError(result.errors[0])
-        new, dup = store_fills(session, conn.account, "ibkr", result.fills)
-        store_cash_flows(session, conn.account, "ibkr", result.cash_flows)
+        new, dup = store_fills(session, conn.account, "ibkr", result.fills, book=conn.id)
+        store_cash_flows(session, conn.account, "ibkr", result.cash_flows, book=conn.id)
         _finish(conn, now, new, "; ".join(result.errors[:3]))
         if result.errors:
             conn.last_status = "partial"
@@ -188,8 +188,8 @@ def connection_for_token(session: Session, token: str) -> Optional[Connection]:
 
 def ingest_mt5(session: Session, conn: Connection, payload: Mt5Payload, now: Optional[datetime] = None) -> dict:
     fills, errors, flows = mt5_fills(payload)
-    new, dup = store_fills(session, conn.account, "mt5", fills)
-    store_cash_flows(session, conn.account, "mt5", flows)
+    new, dup = store_fills(session, conn.account, "mt5", fills, book=conn.id)   # każde konto osobno
+    store_cash_flows(session, conn.account, "mt5", flows, book=conn.id)
     _finish(conn, now or datetime.now(timezone.utc), new, "; ".join(errors[:3]))
     if errors:
         conn.last_status = "partial"

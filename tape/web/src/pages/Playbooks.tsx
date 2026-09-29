@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api, type Setup, type SetupInput } from "../api";
+import { useBook } from "../book";
 import { money, pct, r, tone } from "../format";
 
 function SetupForm({ initial, onDone }: { initial?: Setup; onDone: () => void }) {
@@ -50,8 +51,9 @@ function SetupForm({ initial, onDone }: { initial?: Setup; onDone: () => void })
 
 export function Playbooks() {
   const qc = useQueryClient();
-  const setups = useQuery({ queryKey: ["setups"], queryFn: api.setups });
-  const stats = useQuery({ queryKey: ["stats"], queryFn: api.stats });
+  const { book } = useBook();
+  const setups = useQuery({ queryKey: ["setups", book], queryFn: () => api.setups(book) });
+  const stats = useQuery({ queryKey: ["stats", book], queryFn: () => api.stats(book) });
   const [editing, setEditing] = useState<number | "new" | null>(null);
   const remove = useMutation({
     mutationFn: (id: number) => api.deleteSetup(id),

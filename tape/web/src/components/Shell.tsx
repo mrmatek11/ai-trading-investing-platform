@@ -1,6 +1,7 @@
 import { Link, Outlet, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useAccountMenu } from "../auth";
+import { BookSelect } from "../book";
 import { Ticker } from "./Ticker";
 
 const NAV: { to: string; label: string; icon: ReactNode }[] = [
@@ -203,6 +204,7 @@ export function Shell() {
           </form>
           {error && <span role="status" className="text-xs text-warn">{error}</span>}
           <div className="flex-1" />
+          <BookSelect />
           <Ticker />
           {accountMenu}
         </header>

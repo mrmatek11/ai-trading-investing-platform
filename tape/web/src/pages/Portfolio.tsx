@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { api, type Portfolio } from "../api";
+import { useBook } from "../book";
 import { money, num, pct, price, tone, when } from "../format";
 
 const MONTHS = ["Sty", "Lut", "Mar", "Kwi", "Maj", "Cze", "Lip", "Sie", "Wrz", "Paź", "Lis", "Gru"];
@@ -94,6 +95,7 @@ function MonthlyGrid({ months }: { months: Portfolio["months"] }) {
 }
 
 function CashFlows({ data }: { data: Portfolio }) {
+  const { book } = useBook();
   const qc = useQueryClient();
   const [ts, setTs] = useState(() => new Date().toISOString().slice(0, 10));
   const [amount, setAmount] = useState("");
@@ -102,6 +104,7 @@ function CashFlows({ data }: { data: Portfolio }) {
   const add = useMutation<unknown, Error>({
     mutationFn: () =>
       api.addCashFlow({
+        book: book ?? "",
         ts: `${ts}T00:00:00Z`,
         amount: Number(amount.replace(",", ".").replace(/\s/g, "")),
         currency: "USD",
@@ -197,7 +200,8 @@ function CashFlows({ data }: { data: Portfolio }) {
 }
 
 export function PortfolioPage() {
-  const q = useQuery({ queryKey: ["portfolio"], queryFn: api.portfolio });
+  const { book } = useBook();
+  const q = useQuery({ queryKey: ["portfolio", book], queryFn: () => api.portfolio(book) });
   if (q.isLoading) return <div className="p-6 text-muted">Ładowanie…</div>;
   if (q.isError) return <div className="p-6 text-neg">Nie udało się pobrać portfela: {q.error.message}</div>;
   const d = q.data!;

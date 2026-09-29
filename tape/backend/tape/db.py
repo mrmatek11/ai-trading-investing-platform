@@ -8,7 +8,7 @@ from __future__ import annotations
 import os
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Iterable, List, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 
 from sqlalchemy import (JSON, DateTime, Integer, Numeric, String, TypeDecorator, UniqueConstraint,
                         create_engine, select)
@@ -58,11 +58,13 @@ class Base(DeclarativeBase):
 
 class FillRow(Base):
     __tablename__ = "fills"
-    __table_args__ = (UniqueConstraint("account", "source", "external_id", name="uq_fill_identity"),)
+    __table_args__ = (UniqueConstraint("account", "source", "book", "external_id", name="uq_fill_identity"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     account: Mapped[str] = mapped_column(String(64), default="default", index=True)
     source: Mapped[str] = mapped_column(String(32))
+    # rachunek u brokera (np. dwa konta prop): numery transakcji są unikalne tylko w jego obrębie
+    book: Mapped[str] = mapped_column(String(64), default="", index=True)
     external_id: Mapped[str] = mapped_column(String(128))
     ts: Mapped[datetime] = mapped_column(UtcDateTime, index=True)
     symbol: Mapped[str] = mapped_column(String(32), index=True)
@@ -76,7 +78,8 @@ class FillRow(Base):
     currency: Mapped[str] = mapped_column(String(8), default="USD")
 
     def to_fill(self) -> Fill:
-        return Fill(external_id=f"{self.source}:{self.external_id}", ts=self.ts, symbol=self.symbol,
+        prefix = f"{self.source}:{self.book}:" if self.book else f"{self.source}:"
+        return Fill(external_id=f"{prefix}{self.external_id}", ts=self.ts, symbol=self.symbol,
                     side=self.side, qty=self.qty, price=self.price, contract_size=self.contract_size,
                     fee=self.fee, broker_pnl=self.broker_pnl, stop_loss=self.stop_loss, currency=self.currency)
 
@@ -96,11 +99,12 @@ class ImportRow(Base):
 
 class CashFlowRow(Base):
     __tablename__ = "cash_flows"
-    __table_args__ = (UniqueConstraint("account", "source", "external_id", name="uq_cash_flow_identity"),)
+    __table_args__ = (UniqueConstraint("account", "source", "book", "external_id", name="uq_cash_flow_identity"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     account: Mapped[str] = mapped_column(String(64), index=True)
     source: Mapped[str] = mapped_column(String(32))          # mt5 | ibkr | manual
+    book: Mapped[str] = mapped_column(String(64), default="", index=True)
     external_id: Mapped[str] = mapped_column(String(128))
     ts: Mapped[datetime] = mapped_column(UtcDateTime, index=True)
     amount: Mapped[Decimal] = mapped_column(ExactDecimal)
@@ -119,11 +123,11 @@ def make_sessionmaker(url: str | None = None) -> sessionmaker:
     return sessionmaker(engine, expire_on_commit=False)
 
 
-def store_fills(session: Session, account: str, source: str, fills: Iterable[Fill]) -> Tuple[int, int]:
-    """Zapisz fill-e idempotentnie; zwraca (nowe, duplikaty)."""
+def store_fills(session: Session, account: str, source: str, fills: Iterable[Fill], book: str = "") -> Tuple[int, int]:
+    """Zapisz fill-e idempotentnie (w obrębie rachunku `book`); zwraca (nowe, duplikaty)."""
     fills = list(fills)
     existing = set(session.scalars(
-        select(FillRow.external_id).where(FillRow.account == account, FillRow.source == source)
+        select(FillRow.external_id).where(FillRow.account == account, FillRow.source == source, FillRow.book == book)
     ))
     new = 0
     seen_now = set()
@@ -131,7 +135,7 @@ def store_fills(session: Session, account: str, source: str, fills: Iterable[Fil
         if f.external_id in existing or f.external_id in seen_now:
             continue
         seen_now.add(f.external_id)
-        session.add(FillRow(account=account, source=source, external_id=f.external_id, ts=f.ts,
+        session.add(FillRow(account=account, source=source, book=book, external_id=f.external_id, ts=f.ts,
                             symbol=f.symbol, side=f.side, qty=f.qty, price=f.price,
                             contract_size=f.contract_size, fee=f.fee, broker_pnl=f.broker_pnl,
                             stop_loss=f.stop_loss, currency=f.currency))
@@ -139,25 +143,43 @@ def store_fills(session: Session, account: str, source: str, fills: Iterable[Fil
     return new, len(fills) - new
 
 
-def store_cash_flows(session: Session, account: str, source: str, flows: Iterable[CashFlow]) -> int:
+def store_cash_flows(session: Session, account: str, source: str, flows: Iterable[CashFlow], book: str = "") -> int:
     existing = set(session.scalars(
-        select(CashFlowRow.external_id).where(CashFlowRow.account == account, CashFlowRow.source == source)
+        select(CashFlowRow.external_id).where(CashFlowRow.account == account, CashFlowRow.source == source,
+                                              CashFlowRow.book == book)
     ))
     n = 0
     for f in flows:
         if f.external_id in existing:
             continue
         existing.add(f.external_id)
-        session.add(CashFlowRow(account=account, source=source, external_id=f.external_id, ts=f.ts,
+        session.add(CashFlowRow(account=account, source=source, book=book, external_id=f.external_id, ts=f.ts,
                                 amount=f.amount, currency=f.currency, note=f.note[:200]))
         n += 1
     return n
 
 
-def load_cash_flows(session: Session, account: str) -> List[CashFlowRow]:
-    return list(session.scalars(select(CashFlowRow).where(CashFlowRow.account == account).order_by(CashFlowRow.ts)))
+def load_cash_flows(session: Session, account: str, book: Optional[str] = None) -> List[CashFlowRow]:
+    q = select(CashFlowRow).where(CashFlowRow.account == account)
+    if book is not None:
+        q = q.where(CashFlowRow.book == book)
+    return list(session.scalars(q.order_by(CashFlowRow.ts)))
 
 
-def load_fills(session: Session, account: str = "default") -> List[Fill]:
-    rows = session.scalars(select(FillRow).where(FillRow.account == account).order_by(FillRow.ts))
-    return [r.to_fill() for r in rows]
+def load_fills_by_book(session: Session, account: str = "default", book: Optional[str] = None) -> Dict[str, List[Fill]]:
+    """Fill-e pogrupowane po rachunku — pozycje liczymy osobno dla każdego (inaczej dwa konta by się znosiły)."""
+    q = select(FillRow).where(FillRow.account == account)
+    if book is not None:
+        q = q.where(FillRow.book == book)
+    out: Dict[str, List[Fill]] = {}
+    for r in session.scalars(q.order_by(FillRow.ts)):
+        out.setdefault(r.book, []).append(r.to_fill())
+    return out
+
+
+def load_fills(session: Session, account: str = "default", book: Optional[str] = None) -> List[Fill]:
+    return [f for fills in load_fills_by_book(session, account, book).values() for f in fills]
+
+
+def books(session: Session, account: str) -> List[str]:
+    return sorted(set(session.scalars(select(FillRow.book).where(FillRow.account == account).distinct())))

@@ -1,6 +1,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect, useState, type ReactNode } from "react";
 import { api, type PropInput, type SizeInput } from "../api";
+import { useBook } from "../book";
 import { money, pct } from "../format";
 
 const INSTRUMENTS = [
@@ -131,6 +132,7 @@ const STATUS: Record<string, { label: string; tone: string }> = {
 };
 
 function PropTracker() {
+  const { book } = useBook();
   const [f, setF] = useState({ balance: "100000", daily: "5", dd: "10", type: "static" as PropInput["drawdown_type"], target: "10" });
   const set = (k: keyof typeof f) => (v: string) => setF({ ...f, [k]: v });
   const m = useMutation({
@@ -141,7 +143,7 @@ function PropTracker() {
         max_drawdown_pct: Number(f.dd),
         drawdown_type: f.type,
         profit_target_pct: f.target ? Number(f.target) : null,
-      }),
+      }, book),
   });
   const rep = m.data?.report;
   const breachLabel = rep?.breach === "daily" ? "dzienny limit straty" : "maksymalny drawdown";

@@ -117,8 +117,8 @@ def test_ibkr_connection_sync_and_isolation(app_env):
     assert len(c.get("/api/positions", headers=hdr("user_a")).json()) == 2
     assert c.get("/api/positions", headers=hdr("user_b")).json() == []
 
-    # ręczny import tego samego raportu = same duplikaty (wspólne źródło „ibkr”)
-    imp = c.post("/api/imports", headers=hdr("user_a"),
+    # ręczny import tego samego raportu na to samo konto = same duplikaty
+    imp = c.post("/api/imports", headers=hdr("user_a"), data={"book": cid},
                  files={"file": ("flex.xml", io.BytesIO(FLEX), "application/xml")}).json()
     assert imp["new"] == 0 and imp["duplicates"] == 3
 
@@ -203,3 +203,27 @@ def test_secret_copied_to_other_account_does_not_decrypt(tmp_path):
         seen = []
         rep = sync_ibkr(s, attacker, b, lambda tok, q: seen.append(tok) or FLEX)
         assert seen == [] and rep["new"] == 0 and attacker.last_status == "error"
+
+
+def test_two_mt5_accounts_with_same_tickets_stay_separate(app_env):
+    c, _, _ = app_env
+    ftmo = c.post("/api/connections/mt5", headers=hdr("user_a"), json={"label": "FTMO 100k"}).json()
+    other = c.post("/api/connections/mt5", headers=hdr("user_a"), json={"label": "The5ers 60k"}).json()
+    long_ = {"gmt_offset": 0, "deals": [
+        {"ticket": 10, "time": 1789034400, "symbol": "XAUUSD", "type": "buy", "entry": "in", "volume": 1, "price": 2650},
+        {"ticket": 11, "time": 1789041600, "symbol": "XAUUSD", "type": "sell", "entry": "out", "volume": 1, "price": 2670, "profit": 2000}]}
+    short = {"gmt_offset": 0, "deals": [                                   # te same tickety, inne konto, w tym samym czasie
+        {"ticket": 10, "time": 1789035000, "symbol": "XAUUSD", "type": "sell", "entry": "in", "volume": 1, "price": 2655},
+        {"ticket": 11, "time": 1789041000, "symbol": "XAUUSD", "type": "buy", "entry": "out", "volume": 1, "price": 2665, "profit": -1000}]}
+    assert c.post("/api/ingest/mt5", json=long_, headers={"Authorization": f"Bearer {ftmo['token']}"}).json()["new"] == 2
+    assert c.post("/api/ingest/mt5", json=short, headers={"Authorization": f"Bearer {other['token']}"}).json()["new"] == 2
+
+    allpos = c.get("/api/positions", headers=hdr("user_a")).json()
+    assert sorted(p["net_pnl"] for p in allpos) == [-1000, 2000]              # nie znoszą się nawzajem
+    only = c.get(f"/api/positions?book={ftmo['id']}", headers=hdr("user_a")).json()
+    assert [p["net_pnl"] for p in only] == [2000] and only[0]["book"] == ftmo["id"]
+    assert c.get(f"/api/stats?book={other['id']}", headers=hdr("user_a")).json()["summary"]["net_pnl"] == -1000
+    books = {b["label"]: b for b in c.get("/api/books", headers=hdr("user_a")).json()}
+    assert books["FTMO 100k"]["has_trades"] and books["The5ers 60k"]["kind"] == "mt5_push"
+    assert c.get("/api/books", headers=hdr("user_b")).json() == []
+    assert c.get(f"/api/positions?book={ftmo['id']}", headers=hdr("user_b")).json() == []

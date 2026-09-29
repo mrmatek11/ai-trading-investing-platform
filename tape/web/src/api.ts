@@ -290,18 +290,24 @@ async function get<T>(path: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+export type Book = { id: string; label: string; kind: "mt5_push" | "ibkr_flex" | "import"; has_trades: boolean };
+
+// null = wszystkie rachunki; "" to też rachunek (import z plików bez nazwy)
+const bq = (book: string | null) => (book === null ? "" : `?book=${encodeURIComponent(book)}`);
+
 export const api = {
-  stats: () => get<Stats>("/api/stats"),
-  positions: () => get<Position[]>("/api/positions"),
+  stats: (book: string | null = null) => get<Stats>(`/api/stats${bq(book)}`),
+  positions: (book: string | null = null) => get<Position[]>(`/api/positions${bq(book)}`),
   events: () => get<MarketEvent[]>("/api/events"),
   bias: () => get<BiasResponse>("/api/bias"),
   positionSize: (input: SizeInput) => post<SizeResult>("/api/tools/position-size", input),
-  prop: (input: PropInput) => post<PropResponse>("/api/prop/evaluate", input),
+  prop: (input: PropInput, book: string | null = null) => post<PropResponse>(`/api/prop/evaluate${bq(book)}`, input),
   position: (key: string) => get<PositionDetail>(`/api/positions/${encodeURIComponent(key)}`),
   saveJournal: (key: string, body: Omit<JournalData, "initial_stop"> & { initial_stop: number | null }) =>
     send<{ ok: boolean }>("PUT", `/api/positions/${encodeURIComponent(key)}/journal`, body),
   journalMeta: () => get<{ mistakes: string[] }>("/api/journal/meta"),
-  setups: () => get<Setup[]>("/api/setups"),
+  setups: (book: string | null = null) => get<Setup[]>(`/api/setups${bq(book)}`),
+  books: () => get<Book[]>("/api/books"),
   createSetup: (body: SetupInput) => send<{ id: number }>("POST", "/api/setups", body),
   updateSetup: (id: number, body: SetupInput) => send<{ ok: boolean }>("PUT", `/api/setups/${id}`, body),
   deleteSetup: (id: number) => send<{ ok: boolean }>("DELETE", `/api/setups/${id}`),
@@ -309,8 +315,8 @@ export const api = {
   quotes: () => get<Quote[]>("/api/market/quotes"),
   review: () => get<ReviewState>("/api/review"),
   generateReview: () => send<AiReview>("POST", "/api/review"),
-  portfolio: () => get<Portfolio>("/api/portfolio"),
-  addCashFlow: (body: { ts: string; amount: number; currency: string; note: string }) =>
+  portfolio: (book: string | null = null) => get<Portfolio>(`/api/portfolio${bq(book)}`),
+  addCashFlow: (body: { book: string; ts: string; amount: number; currency: string; note: string }) =>
     send<CashFlowItem>("POST", "/api/cashflows", body),
   deleteCashFlow: (id: number) => send<{ ok: boolean }>("DELETE", `/api/cashflows/${id}`),
   connections: () => get<{ connections: Connection[]; encryption: boolean }>("/api/connections"),
@@ -326,9 +332,10 @@ export const api = {
     if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
     return res.json() as Promise<SuggestResponse>;
   },
-  async importFile(file: File, broker: string, tz: string, mapping?: Mapping): Promise<ImportReport> {
+  async importFile(file: File, broker: string, tz: string, mapping?: Mapping, book = ""): Promise<ImportReport> {
     const body = new FormData();
     body.append("file", file);
+    if (book) body.append("book", book);
     if (mapping) body.append("mapping", JSON.stringify(mapping));
     else if (broker !== "auto") body.append("broker", broker);
     if (tz && !mapping) body.append("tz", tz);

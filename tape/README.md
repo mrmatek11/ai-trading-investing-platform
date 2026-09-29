@@ -23,6 +23,7 @@ research: [`../docs/RESEARCH.md`](../docs/RESEARCH.md).
 | Przegląd AI journala | ✅ kod liczy fakty (F1…), Claude je interpretuje; wnioski bez faktów lub z liczbami spoza faktów są odrzucane; przegląd zapisany do zmiany danych |
 | Ceny XAU/XAG | ✅ Twelve Data, OANDA (konto demo) albo gold-api (bez klucza); świece H1 do wykresów i trafności, bieżąca cena do portfela i paska cen z wiekiem notowania |
 | Kalendarz makro USD | ✅ daty FOMC w kodzie, opcjonalnie tygodniowy feed albo CSV od admina; panel „7 dni” przy globusie, dane w pobliżu transakcji, segment „wejście ±30 min od ważnych danych” w statystykach i przeglądzie AI |
+| Wiele kont (rachunków) | ✅ każde połączenie MT5/IBKR i każda nazwa przy imporcie to osobny rachunek: osobna deduplikacja, osobne pozycje; przełącznik „Konto” w nagłówku filtruje journal, transakcje, portfel i ryzyko |
 | Szczegóły transakcji | ✅ wykres (Lightweight Charts) z IN/OUT/SL na cenach z `/api/prices`, wykonania, journal |
 | Playbooki i błędy | ✅ setupy z checklistą reguł, taksonomia błędów, wynik per setup i per błąd; ręczny SL → R dla MT5 |
 | Globus zdarzeń 3D | ✅ globe.gl: warstwy, XAU/XAG, obrót do wybranego zdarzenia, pierścienie dla nowych |
@@ -90,6 +91,9 @@ Zmienne środowiskowe:
 React 19 + Vite + TypeScript · TanStack Router / Query · Tailwind v4 · globe.gl (three.js) · uPlot ·
 FastAPI · SQLAlchemy 2 · Claude API (structured outputs, prompt caching, server-side fallback).
 Uzasadnienie wyborów: `PRODUCT_SPEC.md` sekcja 6.
+
+> ⚠️ Schemat bazy zmienia się jeszcze bez migracji (tabele tworzy `create_all`). Przed pierwszym
+> wdrożeniem z prawdziwymi danymi dodajemy Alembic; do tego czasu po zmianie schematu usuń bazę dev.
 
 ## Zasady, których pilnuje kod
 

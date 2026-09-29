@@ -26,7 +26,8 @@ from . import econ_calendar, market
 from . import review as ai_review
 from . import sync as broker_sync
 from .auth import AuthError, Verifier, admin_subs, verifier_from_env
-from .db import CashFlowRow, ImportRow, load_cash_flows, load_fills, make_sessionmaker, store_cash_flows, store_fills
+from .db import (CashFlowRow, ImportRow, books as list_books, load_cash_flows, load_fills, load_fills_by_book,
+                 make_sessionmaker, store_cash_flows, store_fills)
 from .engine import portfolio, prop, risk, stats
 from .engine.positions import build_positions
 from .importers import BROKERS, generic, parse_file
@@ -77,6 +78,7 @@ class PropRequest(BaseModel):
 
 
 class CashFlowIn(BaseModel):
+    book: str = Field("", max_length=64)
     ts: datetime
     amount: Decimal = Field(gt=Decimal("-1e12"), lt=Decimal("1e12"))
     currency: str = Field("USD", pattern="^[A-Z]{3}$")
@@ -139,15 +141,21 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
 
     app = FastAPI(title="Tape API", version="0.1.0", dependencies=[Depends(auth)])
 
-    def positions_for(account: str):
+    def positions_for(account: str, book: Optional[str] = None):
+        """Pozycje liczone osobno dla każdego rachunku — long na jednym koncie nie zamyka shorta na drugim."""
         with Session() as s:
-            items = build_positions(load_fills(s, account))
+            items = []
+            for b, fills in load_fills_by_book(s, account, book or None).items():
+                for p in build_positions(fills):
+                    p.book = b
+                    items.append(p)
+            items.sort(key=lambda p: p.opened_at)
             journal.apply_manual_stops(items, journal.entries_by_key(s, account))
             return items
 
     def position_dict(p, entry=None, setups=None):
         return {
-            "key": p.key, "symbol": p.symbol, "direction": "long" if p.direction == 1 else "short",
+            "key": p.key, "book": getattr(p, "book", ""), "symbol": p.symbol, "direction": "long" if p.direction == 1 else "short",
             "opened_at": p.opened_at.isoformat(), "closed_at": p.closed_at.isoformat() if p.closed_at else None,
             "qty": str(p.qty), "avg_entry": str(round(p.avg_entry, 5)),
             "avg_exit": str(round(p.avg_exit, 5)) if p.avg_exit is not None else None,
@@ -203,6 +211,7 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
         broker: Optional[str] = Form(None),
         tz: Optional[str] = Form(None),
         mapping: Optional[str] = Form(None),
+        book: str = Form("", max_length=64),
         account: str = Depends(current_account),
     ):
         data = await file.read()
@@ -221,8 +230,8 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
                             tz=tz, mapping=parsed_mapping)
         source = result.detected or (broker or "unknown")
         with Session() as s:
-            new, dup = store_fills(s, account, source, result.fills) if result.fills else (0, 0)
-            flows_new = store_cash_flows(s, account, source, result.cash_flows)
+            new, dup = store_fills(s, account, source, result.fills, book.strip()) if result.fills else (0, 0)
+            flows_new = store_cash_flows(s, account, source, result.cash_flows, book.strip())
             s.add(ImportRow(account=account, source=source, filename=file.filename or "", new=new,
                             duplicates=dup, errors=result.errors[:200]))
             s.commit()
@@ -230,8 +239,8 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
                 "duplicates": dup, "errors": result.errors[:50], "error_count": len(result.errors)}
 
     @app.get("/api/positions")
-    def positions(account: str = Depends(current_account), limit: int = 200):
-        items = positions_for(account)
+    def positions(account: str = Depends(current_account), limit: int = 200, book: Optional[str] = None):
+        items = positions_for(account, book)
         items.sort(key=lambda p: p.closed_at or p.opened_at, reverse=True)
         with Session() as s:
             entries = journal.entries_by_key(s, account)
@@ -294,8 +303,8 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
         return {"mistakes": journal.MISTAKES}
 
     @app.get("/api/setups")
-    def list_setups(account: str = Depends(current_account)):
-        items = positions_for(account)
+    def list_setups(account: str = Depends(current_account), book: Optional[str] = None):
+        items = positions_for(account, book)
         with Session() as s:
             setups = load_setups(s, account)
             entries = journal.entries_by_key(s, account)
@@ -342,8 +351,8 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
         return {"ok": True}
 
     @app.get("/api/stats")
-    def get_stats(account: str = Depends(current_account)):
-        items = positions_for(account)
+    def get_stats(account: str = Depends(current_account), book: Optional[str] = None):
+        items = positions_for(account, book)
         with Session() as s:
             entries = journal.entries_by_key(s, account)
             setups = load_setups(s, account)
@@ -370,13 +379,13 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
                 "warnings": list(r.warnings)}
 
     @app.post("/api/prop/evaluate")
-    def prop_evaluate(req: PropRequest, account: str = Depends(current_account)):
+    def prop_evaluate(req: PropRequest, account: str = Depends(current_account), book: Optional[str] = None):
         try:
             rules = prop.PropRules(req.initial_balance, req.daily_loss_pct, req.max_drawdown_pct,
                                    req.drawdown_type, req.profit_target_pct, req.day_tz, name="Twoje konto")
         except Exception as exc:  # np. nieznana strefa czasowa
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-        items = positions_for(account)
+        items = positions_for(account, book)
         try:
             report = prop.evaluate(items, rules)
         except Exception as exc:
@@ -422,8 +431,8 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
 
     # ---- przegląd AI ----
 
-    def review_inputs(account: str):
-        items = positions_for(account)
+    def review_inputs(account: str, book: Optional[str] = None):
+        items = positions_for(account, book)
         with Session() as s:
             facts = ai_review.build_facts(items, journal.entries_by_key(s, account), load_setups(s, account),
                                           news_times(items))
@@ -465,17 +474,29 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
             s.commit()
             return ai_review.to_dict(row, facts, h)
 
+    @app.get("/api/books")
+    def get_books(account: str = Depends(current_account)):
+        """Rachunki handlowe: połączenia (MT5/IBKR) i nazwy nadane przy imporcie pliku."""
+        with Session() as s:
+            conns = {c.id: c for c in s.scalars(select(broker_sync.Connection)
+                                                .where(broker_sync.Connection.account == account))}
+            used = list_books(s, account)
+        out = [{"id": c.id, "label": c.label, "kind": c.kind, "has_trades": c.id in used} for c in conns.values()]
+        out += [{"id": b, "label": b or "Import z plików", "kind": "import", "has_trades": True}
+                for b in used if b not in conns]
+        return sorted(out, key=lambda x: (x["kind"] != "import" or x["id"] != "", x["label"].lower()))
+
     # ---- portfel ----
 
     def flow_dict(f: CashFlowRow):
-        return {"id": f.id, "ts": f.ts.isoformat(), "amount": float(f.amount), "currency": f.currency,
+        return {"id": f.id, "book": f.book, "ts": f.ts.isoformat(), "amount": float(f.amount), "currency": f.currency,
                 "note": f.note, "source": f.source}
 
     @app.get("/api/portfolio")
-    def get_portfolio(account: str = Depends(current_account)):
-        items = positions_for(account)
+    def get_portfolio(account: str = Depends(current_account), book: Optional[str] = None):
+        items = positions_for(account, book)
         with Session() as s:
-            rows = load_cash_flows(s, account)
+            rows = load_cash_flows(s, account, book or None)
             marks = {a: m for a in ("XAU", "XAG") if (m := market.mark(s, a))}
         flows = [portfolio.Flow(f.ts, f.amount) for f in rows]
         rep = portfolio.report(items, flows, marks)
@@ -510,7 +531,7 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
             raise HTTPException(status_code=422, detail="Kwota nie może być zerowa")
         ts = body.ts if body.ts.tzinfo else body.ts.replace(tzinfo=timezone.utc)
         with Session() as s:
-            row = CashFlowRow(account=account, source="manual", external_id=uuid.uuid4().hex, ts=ts,
+            row = CashFlowRow(account=account, source="manual", book=body.book, external_id=uuid.uuid4().hex, ts=ts,
                               amount=body.amount, currency=body.currency, note=body.note)
             s.add(row)
             s.commit()

@@ -1,6 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import { useBook } from "../book";
 import { api, type ImportReport, type Mapping, type SuggestResponse } from "../api";
 import { MappingStep } from "../components/MappingStep";
 
@@ -26,16 +28,20 @@ export function ImportPage() {
   const [broker, setBroker] = useState("auto");
   const [tz, setTz] = useState("");
   const [suggestion, setSuggestion] = useState<SuggestResponse | null>(null);
+  const { book: selected } = useBook();
+  const books = useQuery({ queryKey: ["books"], queryFn: api.books });
+  const [target, setTarget] = useState<string>(selected ?? "");
+  const [newName, setNewName] = useState("");
+  const bookValue = target === "__new" ? newName.trim() : target;
   const refresh = () => {
-    qc.invalidateQueries({ queryKey: ["stats"] });
-    qc.invalidateQueries({ queryKey: ["positions"] });
+    for (const k of ["stats", "positions", "portfolio", "books", "setups"]) qc.invalidateQueries({ queryKey: [k] });
   };
   const suggest = useMutation<SuggestResponse, Error>({
     mutationFn: () => api.suggestMapping(file!),
     onSuccess: setSuggestion,
   });
   const mutation = useMutation<ImportReport, Error, Mapping | undefined>({
-    mutationFn: (mapping) => api.importFile(file!, broker, tz, mapping),
+    mutationFn: (mapping) => api.importFile(file!, broker, tz, mapping, bookValue),
     onSuccess: (report, mapping) => {
       refresh();
       if (mapping) setSuggestion(null);
@@ -82,6 +88,28 @@ export function ImportPage() {
 
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="flex flex-col gap-1.5">
+            <span className="text-muted">Konto (rachunek u brokera)</span>
+            <select value={target} onChange={(e) => setTarget(e.target.value)} className="h-9 rounded-md border border-line bg-surface px-2">
+              <option value="">Import z plików (domyślne)</option>
+              {(books.data ?? [])
+                .filter((b) => b.id !== "")
+                .map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.label}
+                  </option>
+                ))}
+              <option value="__new">Nowe konto…</option>
+            </select>
+          </label>
+          {target === "__new" ? (
+            <label className="flex flex-col gap-1.5">
+              <span className="text-muted">Nazwa nowego konta</span>
+              <input value={newName} onChange={(e) => setNewName(e.target.value)} maxLength={64} placeholder="np. FTMO 100k #2" className="h-9 rounded-md border border-line bg-surface px-2 placeholder:text-muted" />
+            </label>
+          ) : (
+            <p className="self-end pb-2 text-xs text-muted">Osobne konta = osobne pozycje, statystyki i limity prop firmy.</p>
+          )}
+          <label className="flex flex-col gap-1.5">
             <span className="text-muted">Format</span>
             <select value={broker} onChange={(e) => setBroker(e.target.value)} className="h-9 rounded-md border border-line bg-surface px-2">
               {BROKERS.map((b) => (
@@ -102,7 +130,7 @@ export function ImportPage() {
           </label>
         </div>
 
-        <button type="submit" disabled={!file || mutation.isPending || suggest.isPending} className="h-10 rounded-md bg-fg font-medium text-bg disabled:opacity-40">
+        <button type="submit" disabled={!file || mutation.isPending || suggest.isPending || (target === "__new" && !newName.trim())} className="h-10 rounded-md bg-fg font-medium text-bg disabled:opacity-40">
           {mutation.isPending ? "Importuję…" : suggest.isPending ? "Analizuję kolumny…" : broker === "custom" ? "Dalej: mapowanie kolumn" : "Importuj"}
         </button>
       </form>

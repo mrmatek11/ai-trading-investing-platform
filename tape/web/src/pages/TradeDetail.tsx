@@ -147,7 +147,7 @@ function JournalPanel({ detail, setups, mistakeOptions }: { detail: PositionDeta
 export function TradeDetail() {
   const { key } = useParams({ strict: false }) as { key: string };
   const detail = useQuery({ queryKey: ["position", key], queryFn: () => api.position(key) });
-  const setups = useQuery({ queryKey: ["setups"], queryFn: api.setups });
+  const setups = useQuery({ queryKey: ["setups", "all"], queryFn: () => api.setups() });
   const meta = useQuery({ queryKey: ["journal-meta"], queryFn: api.journalMeta, staleTime: Infinity });
 
   if (detail.isLoading) return <div className="p-6 text-muted">Ładowanie…</div>;

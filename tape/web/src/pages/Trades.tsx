@@ -1,10 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { api } from "../api";
+import { useBook } from "../book";
 import { money, price, r, tone, when } from "../format";
 
 export function Trades() {
-  const q = useQuery({ queryKey: ["positions"], queryFn: api.positions });
+  const { book } = useBook();
+  const q = useQuery({ queryKey: ["positions", book], queryFn: () => api.positions(book) });
   return (
     <div className="px-6 py-5">
       <h1 className="mb-4 text-xl font-semibold tracking-tight">Transakcje</h1>
