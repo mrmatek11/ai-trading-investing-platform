@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from . import journal
-from . import econ_calendar, market
+from . import econ_calendar, market, prop_accounts
 from . import review as ai_review
 from . import sync as broker_sync
 from .auth import AuthError, Verifier, admin_subs, verifier_from_env
@@ -83,6 +83,11 @@ class CashFlowIn(BaseModel):
     amount: Decimal = Field(gt=Decimal("-1e12"), lt=Decimal("1e12"))
     currency: str = Field("USD", pattern="^[A-Z]{3}$")
     note: str = Field("", max_length=200)
+
+
+class PropAccountIn(PropRequest):
+    book: str = Field("", max_length=64)
+    name: str = Field(min_length=1, max_length=80)
 
 
 class IbkrConnectionIn(BaseModel):
@@ -628,6 +633,50 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
             rep = broker_sync.ingest_mt5(s, conn, payload)
             s.commit()
             return rep
+
+    # ---- zapisane konta prop i alerty ----
+
+    def prop_rows(s, account: str):
+        return list(s.scalars(select(prop_accounts.PropAccountRow)
+                              .where(prop_accounts.PropAccountRow.account == account)
+                              .order_by(prop_accounts.PropAccountRow.name)))
+
+    @app.get("/api/prop/accounts")
+    def list_prop_accounts(account: str = Depends(current_account)):
+        now = datetime.now(timezone.utc)
+        with Session() as s:
+            rows = prop_rows(s, account)
+        return [prop_accounts.status_dict(r, prop.today_status(positions_for(account, r.book), r.rules(), now))
+                for r in rows]
+
+    @app.put("/api/prop/accounts")
+    def save_prop_account(body: PropAccountIn, account: str = Depends(current_account)):
+        try:
+            from zoneinfo import ZoneInfo
+            ZoneInfo(body.day_tz)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Nieznana strefa czasowa: {body.day_tz}") from exc
+        with Session() as s:
+            row = next((r for r in prop_rows(s, account) if r.book == body.book), None)
+            if row is None:
+                row = prop_accounts.PropAccountRow(account=account, book=body.book)
+                s.add(row)
+            row.name, row.initial_balance = body.name.strip(), body.initial_balance
+            row.daily_loss_pct, row.max_drawdown_pct = body.daily_loss_pct, body.max_drawdown_pct
+            row.drawdown_type, row.profit_target_pct, row.day_tz = body.drawdown_type, body.profit_target_pct, body.day_tz
+            row.updated_at = datetime.now(timezone.utc)
+            s.commit()
+            return {"id": row.id}
+
+    @app.delete("/api/prop/accounts/{prop_id}")
+    def delete_prop_account(prop_id: int, account: str = Depends(current_account)):
+        with Session() as s:
+            row = s.get(prop_accounts.PropAccountRow, prop_id)
+            if row is None or row.account != account:
+                raise HTTPException(status_code=404, detail="Nie ma takiego konta prop")
+            s.delete(row)
+            s.commit()
+        return {"ok": True}
 
     def current_events(now: datetime):
         """Zdarzenia z pipeline'u newsów; dopóki go nie uruchomiono — przykładowe (oznaczone)."""

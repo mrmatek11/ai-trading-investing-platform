@@ -4,6 +4,7 @@ import { api, type Segment } from "../api";
 import { useBook } from "../book";
 import { AiReview } from "../components/AiReview";
 import { EquityChart } from "../components/EquityChart";
+import { PropLimits } from "../components/PropLimits";
 import { money, num, pct, r, tone, when } from "../format";
 
 const GROUP_LABEL: Record<string, string> = {
@@ -65,6 +66,8 @@ export function Dashboard() {
   return (
     <div className="flex flex-col gap-4 px-6 py-5">
       <h1 className="text-xl font-semibold tracking-tight">Journal</h1>
+
+      <PropLimits />
 
       <section aria-label="Kluczowe liczby" className="grid grid-cols-2 rounded-md border border-line md:grid-cols-5">
         <Kpi label="Net PnL" value={money(s.net_pnl)} className={tone(s.net_pnl)} />

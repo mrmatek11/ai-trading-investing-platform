@@ -290,6 +290,22 @@ async function get<T>(path: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+export type PropAccountStatus = {
+  id: number;
+  book: string;
+  name: string;
+  day: string;
+  status: "active" | "breached" | "passed";
+  level: "ok" | "warn" | "danger" | "breached";
+  balance: number;
+  today_pnl: number;
+  daily_limit: number;
+  daily_left: number;
+  overall_limit: number;
+  overall_left: number;
+  rules: { initial_balance: number; daily_loss_pct: number; max_drawdown_pct: number; drawdown_type: "static" | "trailing"; profit_target_pct: number | null; day_tz: string };
+};
+
 export type Book = { id: string; label: string; kind: "mt5_push" | "ibkr_flex" | "import"; has_trades: boolean };
 
 // null = wszystkie rachunki; "" to też rachunek (import z plików bez nazwy)
@@ -308,6 +324,9 @@ export const api = {
   journalMeta: () => get<{ mistakes: string[] }>("/api/journal/meta"),
   setups: (book: string | null = null) => get<Setup[]>(`/api/setups${bq(book)}`),
   books: () => get<Book[]>("/api/books"),
+  propAccounts: () => get<PropAccountStatus[]>("/api/prop/accounts"),
+  savePropAccount: (body: PropInput & { book: string; name: string; day_tz: string }) => send<{ id: number }>("PUT", "/api/prop/accounts", body),
+  deletePropAccount: (id: number) => send<{ ok: boolean }>("DELETE", `/api/prop/accounts/${id}`),
   createSetup: (body: SetupInput) => send<{ id: number }>("POST", "/api/setups", body),
   updateSetup: (id: number, body: SetupInput) => send<{ ok: boolean }>("PUT", `/api/setups/${id}`, body),
   deleteSetup: (id: number) => send<{ ok: boolean }>("DELETE", `/api/setups/${id}`),

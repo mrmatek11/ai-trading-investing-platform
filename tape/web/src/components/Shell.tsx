@@ -2,6 +2,7 @@ import { Link, Outlet, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useAccountMenu } from "../auth";
 import { BookSelect } from "../book";
+import { PropAlertBar } from "./PropLimits";
 import { Ticker } from "./Ticker";
 
 const NAV: { to: string; label: string; icon: ReactNode }[] = [
@@ -208,6 +209,7 @@ export function Shell() {
           <Ticker />
           {accountMenu}
         </header>
+        <PropAlertBar />
         <main className="min-h-0 flex-1">
           <Outlet />
         </main>

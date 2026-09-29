@@ -102,6 +102,41 @@ def evaluate(positions: Sequence[Position], rules: PropRules) -> PropReport:
     return report
 
 
+@dataclass
+class TodayStatus:
+    day: date                     # dzisiejszy dzień w strefie firmy
+    status: str                   # active | breached | passed
+    balance: Decimal
+    today_pnl: Decimal
+    daily_limit: Decimal
+    daily_left: Decimal
+    overall_limit: Decimal
+    overall_left: Decimal
+    level: str                    # ok | warn | danger | breached
+
+
+def today_status(positions: Sequence[Position], rules: PropRules, now: datetime,
+                 warn_at: Decimal = Decimal("0.5"), danger_at: Decimal = Decimal("0.25")) -> TodayStatus:
+    """Zapas do limitów NA DZIŚ (w strefie firmy). Dzień bez transakcji ma pełny dzienny limit."""
+    rep = evaluate(positions, rules)
+    today = now.astimezone(ZoneInfo(rules.day_tz)).date()
+    daily_amount = rules.initial_balance * rules.daily_loss_pct / 100
+    dd_amount = rules.initial_balance * rules.max_drawdown_pct / 100
+    row = next((d for d in rep.days if d.day == today), None)
+    today_pnl = row.pnl if row else Decimal(0)
+    day_start = row.start_balance if row else rep.balance
+    daily_left = max(Decimal(0), rep.balance - (day_start - daily_amount))
+    overall_left = rep.overall_headroom if rep.overall_headroom is not None else dd_amount
+    if rep.status == "breached":
+        level = "breached"
+    else:
+        share = min(daily_left / daily_amount if daily_amount else Decimal(1),
+                    overall_left / dd_amount if dd_amount else Decimal(1))
+        level = "danger" if share <= danger_at else "warn" if share <= warn_at else "ok"
+    return TodayStatus(today, rep.status, rep.balance, today_pnl, daily_amount, daily_left, dd_amount,
+                       overall_left, level)
+
+
 def simulate(positions: Sequence[Position], initial_balance: Decimal,
              presets: Optional[Dict[str, PropRules]] = None) -> Dict[str, PropReport]:
     """Ta sama historia na różnych typach kont: „na którym koncie przeżyłbyś ten okres?”."""

@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState, type ReactNode } from "react";
 import { api, type PropInput, type SizeInput } from "../api";
 import { useBook } from "../book";
@@ -145,6 +145,26 @@ function PropTracker() {
         profit_target_pct: f.target ? Number(f.target) : null,
       }, book),
   });
+  const qc = useQueryClient();
+  const books = useQuery({ queryKey: ["books"], queryFn: api.books });
+  const withTrades = (books.data ?? []).filter((b) => b.has_trades);
+  const target = book ?? (withTrades.length === 1 ? withTrades[0].id : null);
+  const targetLabel = (books.data ?? []).find((b) => b.id === target)?.label;
+  const [name, setName] = useState("");
+  const save = useMutation<unknown, Error>({
+    mutationFn: () =>
+      api.savePropAccount({
+        book: target ?? "",
+        name: name.trim() || targetLabel || "Konto prop",
+        initial_balance: Number(f.balance),
+        daily_loss_pct: Number(f.daily),
+        max_drawdown_pct: Number(f.dd),
+        drawdown_type: f.type,
+        profit_target_pct: f.target ? Number(f.target) : null,
+        day_tz: "Europe/Prague",
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["prop-accounts"] }),
+  });
   const rep = m.data?.report;
   const breachLabel = rep?.breach === "daily" ? "dzienny limit straty" : "maksymalny drawdown";
 
@@ -176,6 +196,24 @@ function PropTracker() {
         </div>
       </form>
 
+      <div className="mt-3 flex flex-wrap items-end gap-2 border-t border-line-soft pt-3">
+        {target === null ? (
+          <p className="text-xs text-muted">Żeby śledzić limity na bieżąco, wybierz konto w nagłówku (Konto) i zapisz reguły.</p>
+        ) : (
+          <>
+            <label className="flex flex-col gap-1 text-xs text-muted">
+              Nazwa konta prop
+              <input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} placeholder={targetLabel || "np. FTMO 100k"} className="h-8 w-56 rounded-md border border-line bg-surface px-2 text-[13px] text-fg placeholder:text-muted" />
+            </label>
+            <button type="button" onClick={() => save.mutate()} disabled={save.isPending} className="h-8 rounded-md border border-line px-3 disabled:opacity-40">
+              {save.isSuccess ? "Zapisano — limity na dashboardzie" : `Śledź limity dla „${targetLabel ?? "konto"}”`}
+            </button>
+            <span className="text-xs text-muted">dzień liczony w czasie Pragi (jak większość firm)</span>
+          </>
+        )}
+        {save.isError && <span role="alert" className="text-neg">{save.error.message}</span>}
+      </div>
+
       {m.isError && <p role="alert" className="mt-3 text-neg">{m.error.message}</p>}
       {rep && (
         <div className="mt-5 grid gap-5 lg:grid-cols-2">
@@ -189,7 +227,7 @@ function PropTracker() {
             </p>
             <div className="mt-3">
               <Row label="Saldo" value={money(rep.balance, 2, false)} />
-              <Row label="Zapas do dziennego limitu (ostatni dzień)" value={money(rep.daily_headroom ?? 0, 2, false)} />
+              <Row label="Zapas do dziennego limitu (ostatni dzień z transakcjami)" value={money(rep.daily_headroom ?? 0, 2, false)} />
               <Row label="Zapas do max drawdownu" value={money(rep.overall_headroom ?? 0, 2, false)} tone={(rep.overall_headroom ?? 0) === 0 ? "text-neg" : ""} />
               <Row label="Dni z transakcjami" value={String(rep.days.length)} />
             </div>

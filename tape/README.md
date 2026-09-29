@@ -24,6 +24,7 @@ research: [`../docs/RESEARCH.md`](../docs/RESEARCH.md).
 | Ceny XAU/XAG | ✅ Twelve Data, OANDA (konto demo) albo gold-api (bez klucza); świece H1 do wykresów i trafności, bieżąca cena do portfela i paska cen z wiekiem notowania |
 | Kalendarz makro USD | ✅ daty FOMC w kodzie, opcjonalnie tygodniowy feed albo CSV od admina; panel „7 dni” przy globusie, dane w pobliżu transakcji, segment „wejście ±30 min od ważnych danych” w statystykach i przeglądzie AI |
 | Wiele kont (rachunków) | ✅ każde połączenie MT5/IBKR i każda nazwa przy imporcie to osobny rachunek: osobna deduplikacja, osobne pozycje; przełącznik „Konto” w nagłówku filtruje journal, transakcje, portfel i ryzyko |
+| Limity prop na bieżąco | ✅ reguły zapisane dla konta; zapas do dziennego limitu i max drawdownu NA DZIŚ (dzień w strefie firmy), karty na dashboardzie, czerwony pasek przy ≤25% zapasu lub złamaniu |
 | Szczegóły transakcji | ✅ wykres (Lightweight Charts) z IN/OUT/SL na cenach z `/api/prices`, wykonania, journal |
 | Playbooki i błędy | ✅ setupy z checklistą reguł, taksonomia błędów, wynik per setup i per błąd; ręczny SL → R dla MT5 |
 | Globus zdarzeń 3D | ✅ globe.gl: warstwy, XAU/XAG, obrót do wybranego zdarzenia, pierścienie dla nowych |
