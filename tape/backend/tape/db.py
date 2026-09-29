@@ -112,14 +112,31 @@ class CashFlowRow(Base):
     note: Mapped[str] = mapped_column(String(200), default="")
 
 
+def import_models() -> None:
+    """Zaimportuj wszystkie moduły z tabelami, żeby były w Base.metadata."""
+    from . import econ_calendar, journal, market, prop_accounts, reports, review, sync  # noqa: F401
+    from .news import store  # noqa: F401
+
+
+def migrate(url: str) -> None:
+    """Doprowadź schemat bazy do najnowszej migracji (bezpieczne przy wielu procesach na PostgreSQL)."""
+    from pathlib import Path
+
+    from alembic import command
+    from alembic.config import Config
+
+    cfg = Config()
+    cfg.set_main_option("script_location", str(Path(__file__).parent / "migrations"))
+    cfg.set_main_option("sqlalchemy.url", url.replace("%", "%%"))
+    command.upgrade(cfg, "head")
+
+
 def make_sessionmaker(url: str | None = None) -> sessionmaker:
     url = url or os.getenv("DATABASE_URL", "sqlite:///tape.db")
     kwargs = {"connect_args": {"check_same_thread": False}} if url.startswith("sqlite") else {}
+    import_models()
+    migrate(url)
     engine = create_engine(url, **kwargs)
-    from . import journal  # noqa: F401 — rejestruje tabele journala
-    from . import econ_calendar, market, prop_accounts, reports, review, sync  # noqa: F401 — kalendarz, ceny, przeglądy AI, połączenia
-    from .news import store  # noqa: F401 — rejestruje tabele newsów w metadanych
-    Base.metadata.create_all(engine)
     return sessionmaker(engine, expire_on_commit=False)
 
 

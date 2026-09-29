@@ -26,9 +26,15 @@ MT5_CSV = """Time,Deal,Symbol,Type,Direction,Volume,Price,Commission,Fee,Swap,Pr
 def client():
     from tape.db import Base, make_sessionmaker
 
-    make_sessionmaker(URL)                       # rejestruje wszystkie tabele
+    from sqlalchemy import text
+
+    from tape.db import import_models
+
+    import_models()
     engine = create_engine(URL)
     Base.metadata.drop_all(engine)
+    with engine.begin() as conn:                 # czysta baza: migracje wykonają się od zera
+        conn.execute(text("DROP TABLE IF EXISTS alembic_version"))
     engine.dispose()
     from tape.api import create_app
 

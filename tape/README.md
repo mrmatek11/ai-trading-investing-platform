@@ -95,8 +95,18 @@ React 19 + Vite + TypeScript · TanStack Router / Query · Tailwind v4 · globe.
 FastAPI · SQLAlchemy 2 · Claude API (structured outputs, prompt caching, server-side fallback).
 Uzasadnienie wyborów: `PRODUCT_SPEC.md` sekcja 6.
 
-> ⚠️ Schemat bazy zmienia się jeszcze bez migracji (tabele tworzy `create_all`). Przed pierwszym
-> wdrożeniem z prawdziwymi danymi dodajemy Alembic; do tego czasu po zmianie schematu usuń bazę dev.
+### Migracje bazy (Alembic)
+
+Każdy proces (API, workery) przy starcie doprowadza bazę do najnowszej migracji; na PostgreSQL
+równoległe starty czekają na blokadę, więc migracja wykona się raz. Po zmianie modeli:
+
+```bash
+cd tape/backend
+DATABASE_URL=sqlite:///dev.db alembic upgrade head
+DATABASE_URL=sqlite:///dev.db alembic revision --autogenerate -m "opis zmiany"   # przejrzyj plik!
+```
+
+Test `tests/test_migrations.py` pilnuje, żeby migracje odpowiadały modelom.
 
 ## Zasady, których pilnuje kod
 

@@ -14,6 +14,7 @@ dependencies = [
     "pyjwt[crypto]>=2.8",
     "defusedxml>=0.7",
     "cryptography>=42",
+    "alembic>=1.13",
 ]
 
 [project.optional-dependencies]
@@ -29,3 +30,6 @@ include = ["tape*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.setuptools.package-data]
+tape = ["migrations/*.py", "migrations/*.mako", "migrations/versions/*.py"]
