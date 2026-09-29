@@ -62,11 +62,14 @@ export type JournalData = {
   initial_stop: string | null;
 };
 
+export type EconEvent = { ts: string; country: string; title: string; impact: "high" | "medium" | "low"; forecast: string; previous: string; source: string };
+
 export type PositionDetail = {
   position: Position;
   fills: { id: string; ts: string; side: "buy" | "sell"; qty: string; price: string; fee: number; broker_pnl: number | null }[];
   journal: JournalData | null;
   prices: { t: string; p: number }[];
+  events: EconEvent[];
 };
 
 export type Setup = { id: number; name: string; description: string; rules: string[]; stats: GroupStats | null };
@@ -302,6 +305,7 @@ export const api = {
   createSetup: (body: SetupInput) => send<{ id: number }>("POST", "/api/setups", body),
   updateSetup: (id: number, body: SetupInput) => send<{ ok: boolean }>("PUT", `/api/setups/${id}`, body),
   deleteSetup: (id: number) => send<{ ok: boolean }>("DELETE", `/api/setups/${id}`),
+  calendar: (days = 7) => get<{ events: EconEvent[]; sources: string[]; note: string }>(`/api/calendar?days=${days}`),
   quotes: () => get<Quote[]>("/api/market/quotes"),
   review: () => get<ReviewState>("/api/review"),
   generateReview: () => send<AiReview>("POST", "/api/review"),

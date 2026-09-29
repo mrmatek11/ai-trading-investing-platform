@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { api, type PositionDetail, type Setup } from "../api";
+import { ImpactDot } from "../components/CalendarPanel";
 import { TradeChart } from "../components/TradeChart";
 import { money, price, r, tone, when } from "../format";
 
@@ -211,6 +212,25 @@ export function TradeDetail() {
             </tbody>
           </table>
         </section>
+
+        {d.events.length > 0 && (
+          <section aria-label="Dane makro w pobliżu" className="rounded-md border border-line p-4">
+            <h2 className="mb-2 text-[13px] font-medium">Dane makro w pobliżu</h2>
+            <ul className="flex flex-col gap-1.5 text-[12px]">
+              {d.events.map((e) => {
+                const mins = Math.round((new Date(e.ts).getTime() - new Date(p.opened_at).getTime()) / 60000);
+                const rel = mins === 0 ? "przy wejściu" : mins > 0 ? `${mins} min po wejściu` : `${-mins} min przed wejściem`;
+                return (
+                  <li key={e.ts + e.title} className="flex items-center gap-2">
+                    <ImpactDot impact={e.impact} />
+                    <span className="min-w-0 flex-1 truncate">{e.title}</span>
+                    <span className={`num ${Math.abs(mins) <= 30 ? "text-warn" : "text-muted"}`}>{rel}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
 
         <JournalPanel detail={d} setups={setups.data ?? []} mistakeOptions={meta.data?.mistakes ?? []} />
       </div>

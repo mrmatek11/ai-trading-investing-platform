@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { api, type AssetBias, type MarketEvent } from "../api";
+import { CalendarPanel } from "../components/CalendarPanel";
 import { EventGlobe } from "../components/EventGlobe";
 import { age, money } from "../format";
 
@@ -125,6 +126,8 @@ export function GlobePage() {
             {bias.data?.track_record.note} To analiza newsów, nie sygnał transakcyjny.
           </p>
         </section>
+
+        <CalendarPanel />
 
         <section aria-label="Zdarzenia" className="flex min-h-0 flex-1 flex-col border-b border-line">
           <div className="flex items-center border-b border-line-soft px-4 py-2">

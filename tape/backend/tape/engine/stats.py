@@ -9,7 +9,7 @@ from __future__ import annotations
 import math
 from collections import defaultdict
 from dataclasses import asdict, dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Callable, Dict, List, Optional, Sequence
 
@@ -114,7 +114,9 @@ def after_loss_flags(positions: Sequence[Position]) -> Dict[int, bool]:
     return flags
 
 
-def segments(positions: Sequence[Position]) -> List[Segment]:
+def segments(positions: Sequence[Position], news_times: Optional[Sequence[datetime]] = None,
+             news_window: timedelta = timedelta(minutes=30)) -> List[Segment]:
+    """Segmenty z testem istotności. `news_times` (posortowane) dodaje grupę „wejście przy ważnych danych”."""
     done = closed(positions)
     after = after_loss_flags(done)
     groupers: Dict[str, Callable[[Position], str]] = {
@@ -124,6 +126,15 @@ def segments(positions: Sequence[Position]) -> List[Segment]:
         "weekday": lambda p: WEEKDAYS[p.opened_at.weekday()],
         "after_loss": lambda p: "do 30 min po stracie" if after[id(p)] else "pozostałe",
     }
+    if news_times:
+        from bisect import bisect_left
+
+        def at_news(p: Position) -> str:
+            i = bisect_left(news_times, p.opened_at - news_window)
+            hit = i < len(news_times) and news_times[i] <= p.opened_at + news_window
+            return "±30 min od ważnych danych" if hit else "pozostałe"
+
+        groupers["news_window"] = at_news
     out: List[Segment] = []
     for group, key_fn in groupers.items():
         buckets: Dict[str, List[float]] = defaultdict(list)

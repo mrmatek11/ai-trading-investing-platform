@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from . import journal
-from . import market
+from . import econ_calendar, market
 from . import review as ai_review
 from . import sync as broker_sync
 from .auth import AuthError, Verifier, admin_subs, verifier_from_env
@@ -106,6 +106,8 @@ def default_ai_client():
 def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Optional[Verifier] = None,
                secret_box: Optional[SecretBox] = None, flex_fetch=None) -> FastAPI:
     Session = make_sessionmaker(database_url)
+    with Session() as s:
+        econ_calendar.ensure_seed(s)
     box = secret_box if secret_box is not None else SecretBox.from_env()
     ai = ai_client if ai_client is not None else default_ai_client()
     token = os.getenv("TAPE_API_TOKEN", "")
@@ -156,6 +158,15 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
             "mistakes": list(entry.mistakes or []) if entry else [],
             "has_notes": bool(entry and entry.notes),
         }
+
+    def news_times(positions):
+        """Czasy ważnych danych USD w zakresie historii — do segmentu „wejście przy danych”."""
+        if not positions:
+            return []
+        start = min(p.opened_at for p in positions) - timedelta(days=1)
+        end = max(p.opened_at for p in positions) + timedelta(days=1)
+        with Session() as s:
+            return [r.ts for r in econ_calendar.relevant(s, start, end)]
 
     def load_setups(s, account: str):
         return {x.id: x for x in s.scalars(select(journal.Setup).where(journal.Setup.account == account))}
@@ -241,6 +252,8 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
             start = p.opened_at - timedelta(days=2)
             end = (p.closed_at or datetime.now(timezone.utc)) + timedelta(days=1)
             prices = [(t, v) for t, v in news_store.price_series(s, asset) if start <= t <= end][-3000:]
+            events = [econ_calendar.to_dict(r) for r in econ_calendar.relevant(
+                s, p.opened_at - timedelta(hours=6), (p.closed_at or p.opened_at) + timedelta(hours=6), impact="medium")]
         return {
             "position": position_dict(p, entry, setups),
             "fills": [{"id": f.external_id, "ts": f.ts.isoformat(), "side": f.side, "qty": str(f.qty),
@@ -251,6 +264,7 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
                 "notes": entry.notes, "initial_stop": str(entry.initial_stop) if entry.initial_stop is not None else None,
             },
             "prices": [{"t": t.isoformat(), "p": v} for t, v in prices],
+            "events": events,
         }
 
     @app.put("/api/positions/{key}/journal")
@@ -338,7 +352,7 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
             "mistakes": [stats.as_dict(g) for g in journal.mistake_costs(items, entries)],
             "summary": stats.as_dict(stats.summarize(items)),
             "equity": stats.equity_curve(items),
-            "segments": [stats.as_dict(x) for x in stats.segments(items)],
+            "segments": [stats.as_dict(x) for x in stats.segments(items, news_times(items))],
         }
 
     @app.post("/api/tools/position-size")
@@ -375,6 +389,32 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
                                for k, v in sims.items()},
                 "note": "Liczone na saldzie po zamknięciu transakcji; firmy liczą też equity z otwartymi pozycjami."}
 
+    @app.get("/api/calendar")
+    def calendar(days: int = 7):
+        now = datetime.now(timezone.utc)
+        with Session() as s:
+            rows = econ_calendar.relevant(s, now - timedelta(hours=12), now + timedelta(days=max(1, min(days, 60))),
+                                          impact="medium")
+        return {"events": [econ_calendar.to_dict(r) for r in rows],
+                "sources": sorted({r.source for r in rows}),
+                "note": "Daty FOMC wpisane w kodzie — potwierdź na federalreserve.gov." if all(r.source == "seed" for r in rows) else ""}
+
+    @app.post("/api/calendar")
+    async def upload_calendar(request: Request, file: UploadFile = File(...)):
+        if not request.state.is_admin:
+            raise HTTPException(status_code=403, detail="Tylko administrator może wgrywać kalendarz")
+        data = await file.read()
+        if len(data) > MAX_UPLOAD_BYTES:
+            raise HTTPException(status_code=413, detail="Plik większy niż 10 MB")
+        try:
+            events = econ_calendar.parse_csv(data, file.filename or "calendar.csv")
+        except (ValueError, KeyError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        with Session() as s:
+            n = econ_calendar.add_events(s, "csv", events)
+            s.commit()
+        return {"added": n, "rows": len(events)}
+
     @app.get("/api/market/quotes")
     def market_quotes():
         with Session() as s:
@@ -385,7 +425,8 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
     def review_inputs(account: str):
         items = positions_for(account)
         with Session() as s:
-            facts = ai_review.build_facts(items, journal.entries_by_key(s, account), load_setups(s, account))
+            facts = ai_review.build_facts(items, journal.entries_by_key(s, account), load_setups(s, account),
+                                          news_times(items))
         closed = sum(1 for p in items if not p.is_open)
         return facts, ai_review.facts_hash(facts), closed
 

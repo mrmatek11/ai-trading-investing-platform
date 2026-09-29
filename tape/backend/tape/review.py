@@ -27,7 +27,8 @@ from .engine.positions import Position
 MODEL = "claude-opus-5-5"
 MIN_TRADES = 10
 GROUP_LABEL = {"symbol": "Symbol", "direction": "Kierunek", "hour_utc": "Godzina otwarcia (UTC)",
-               "weekday": "Dzień tygodnia", "after_loss": "Wejście do 30 min po stracie"}
+               "weekday": "Dzień tygodnia", "after_loss": "Wejście do 30 min po stracie",
+               "news_window": "Wejście w pobliżu ważnych danych USD"}
 
 SYSTEM_PROMPT = """Jesteś trenerem tradera złota i srebra. Dostajesz listę faktów policzonych przez kod \
 z jego journala (F1, F2, …). Napisz krótki przegląd po polsku.
@@ -78,7 +79,7 @@ def _f(v: Optional[float], digits: int = 2) -> str:
 
 
 def build_facts(positions: Sequence[Position], entries: Dict[str, "journal.JournalEntry"],
-                setups: Dict[int, "journal.Setup"]) -> List[Dict[str, str]]:
+                setups: Dict[int, "journal.Setup"], news_times=None) -> List[Dict[str, str]]:
     s = stats.summarize(positions)
     facts: List[str] = [
         f"Zamkniętych transakcji: {s.trades}; wynik netto {_f(s.net_pnl)} USD; win rate {_f((s.win_rate or 0) * 100, 1)}%; "
@@ -90,7 +91,7 @@ def build_facts(positions: Sequence[Position], entries: Dict[str, "journal.Journ
         facts.append(f"Średni wynik w R: {_f(s.avg_r)} R z {s.r_trades} transakcji ze znanym stop lossem.")
     else:
         facts.append("Brak transakcji ze znanym początkowym stop lossem — R nie jest liczone.")
-    for seg in stats.segments(positions):
+    for seg in stats.segments(positions, news_times):
         sig = "istotne" if seg.significant else "nieistotne statystycznie"
         facts.append(f"{GROUP_LABEL.get(seg.group, seg.group)} = {seg.key}: {seg.trades} transakcji, wynik {_f(seg.net_pnl)} USD, "
                      f"średnio {_f(seg.avg_pnl)} USD, win rate {_f(seg.win_rate * 100, 1)}%, "

@@ -22,6 +22,7 @@ research: [`../docs/RESEARCH.md`](../docs/RESEARCH.md).
 | Portfel | ✅ ekspozycja XAU/XAG w uncjach i USD, otwarte pozycje (FIFO) z wyceną spot, wpłaty/wypłaty (MT5, IBKR, ręcznie), stopa zwrotu miesięczna (Modified Dietz) i TWR |
 | Przegląd AI journala | ✅ kod liczy fakty (F1…), Claude je interpretuje; wnioski bez faktów lub z liczbami spoza faktów są odrzucane; przegląd zapisany do zmiany danych |
 | Ceny XAU/XAG | ✅ Twelve Data, OANDA (konto demo) albo gold-api (bez klucza); świece H1 do wykresów i trafności, bieżąca cena do portfela i paska cen z wiekiem notowania |
+| Kalendarz makro USD | ✅ daty FOMC w kodzie, opcjonalnie tygodniowy feed albo CSV od admina; panel „7 dni” przy globusie, dane w pobliżu transakcji, segment „wejście ±30 min od ważnych danych” w statystykach i przeglądzie AI |
 | Szczegóły transakcji | ✅ wykres (Lightweight Charts) z IN/OUT/SL na cenach z `/api/prices`, wykonania, journal |
 | Playbooki i błędy | ✅ setupy z checklistą reguł, taksonomia błędów, wynik per setup i per błąd; ręczny SL → R dla MT5 |
 | Globus zdarzeń 3D | ✅ globe.gl: warstwy, XAU/XAG, obrót do wybranego zdarzenia, pierścienie dla nowych |

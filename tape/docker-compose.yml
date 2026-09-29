@@ -32,6 +32,7 @@ services:
       TWELVEDATA_API_KEY: ${TWELVEDATA_API_KEY:-}
       OANDA_TOKEN: ${OANDA_TOKEN:-}
       OANDA_ENV: ${OANDA_ENV:-practice}
+      TAPE_CALENDAR_FEED: ${TAPE_CALENDAR_FEED:-}
     depends_on:
       db:
         condition: service_healthy
@@ -60,6 +61,16 @@ services:
   prices:
     build: ./backend
     command: ["python", "-m", "tape.market", "--every", "300", "--backfill", "2000"]
+    environment: *api-env
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    profiles: ["prices"]
+
+  calendar:
+    build: ./backend
+    command: ["python", "-m", "tape.econ_calendar", "--every", "21600"]
     environment: *api-env
     depends_on:
       db:

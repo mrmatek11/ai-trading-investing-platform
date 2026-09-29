@@ -11,6 +11,7 @@ const GROUP_LABEL: Record<string, string> = {
   hour_utc: "Godzina otwarcia (UTC)",
   weekday: "Dzień tygodnia",
   after_loss: "Po stracie",
+  news_window: "Wejście przy ważnych danych USD",
 };
 
 function Insight({ s }: { s: Segment }) {
