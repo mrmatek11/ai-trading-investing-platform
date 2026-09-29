@@ -99,3 +99,38 @@ def test_settings_api_and_preview(tmp_path, monkeypatch):
 def test_trades_word():
     assert [reports.trades_word(n) for n in (1, 2, 5, 12, 22, 25)] == [
         "transakcja", "transakcje", "transakcji", "transakcji", "transakcje", "transakcji"]
+
+
+def test_newline_in_name_cannot_inject_headers_or_block_others(tmp_path):
+    from email.message import EmailMessage
+
+    S = setup_db(tmp_path)
+    with S() as s:
+        row = s.scalars(reports.select(prop_accounts.PropAccountRow)).one()
+        row.name = "FTMO\nBcc: evil@example.com"
+        store_fills(s, "u2", "mt5", fills([100], MONDAY - timedelta(days=2)), book="")
+        s.add(reports.UserSettings(account="u2", email="b@example.com"))
+        store_fills(s, "u1", "mt5", fills([-4500], MONDAY + timedelta(hours=1), prefix="t"), book="FTMO")
+        s.commit()
+
+    built = []
+
+    def strict_send(m):
+        msg = EmailMessage()                                   # jak prawdziwy nadawca SMTP
+        msg["To"], msg["Subject"] = m.to, m.subject
+        msg.set_content(m.text)
+        if m.to == "a@example.com" and m.kind == "weekly":
+            raise OSError("SMTP chwilowo niedostępny")          # awaria u jednego użytkownika
+        built.append(msg)
+
+    with S() as s:
+        rep = reports.run_once(s, strict_send, MONDAY + timedelta(hours=3))
+    assert rep["errors"] == 1 and [m["To"] for m in built] == ["b@example.com"]     # drugi użytkownik dostał raport
+    alert = reports.prop_alerts
+    with S() as s:                                               # alert dla u1 wysłany przy kolejnym przebiegu
+        mails = alert(s, "u1", MONDAY + timedelta(hours=3))
+    assert mails and "\n" not in " ".join(mails[0].subject.split())
+    subject = " ".join(mails[0].subject.split())
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    assert "Bcc" not in msg.keys()

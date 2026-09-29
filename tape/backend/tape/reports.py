@@ -201,25 +201,36 @@ def run_once(session: Session, send: Optional[Sender], now: Optional[datetime] =
              app_url: str = "") -> Dict[str, int]:
     now = now or datetime.now(timezone.utc)
     sent = {"weekly": 0, "alerts": 0}
-    for st in session.scalars(select(UserSettings).where(UserSettings.email != "")):
-        mails: List[Mail] = []
-        weekly = due_weekly(st, now)
-        if weekly:
-            m = weekly_report(session, st.account, now, app_url)
-            st.last_weekly_at = now                                  # także gdy brak transakcji — nie próbujemy co 5 min
-            if m:
-                mails.append(m)
-        if st.prop_alerts:
-            mails += prop_alerts(session, st.account, now)
-        for m in mails:
-            m.to = st.email
-            if send is None:
-                log.info("(bez SMTP) do %s: %s", m.to, m.subject)
-            else:
-                send(m)
-            sent["weekly" if m.kind == "weekly" else "alerts"] += 1
-        session.commit()                                             # zapis po wysyłce: nie gubimy informacji o wysłanych
+    for st in list(session.scalars(select(UserSettings).where(UserSettings.email != ""))):
+        try:
+            _send_for(session, st, send, now, app_url, sent)
+            session.commit()                                         # zapis po wysyłce: nie gubimy informacji o wysłanych
+        except Exception as exc:  # błąd jednego użytkownika nie blokuje raportów pozostałych
+            session.rollback()
+            sent["errors"] = sent.get("errors", 0) + 1
+            log.warning("raporty dla %s: %s", st.account, type(exc).__name__)
     return sent
+
+
+def _send_for(session: Session, st: UserSettings, send: Optional[Sender], now: datetime, app_url: str,
+              sent: Dict[str, int]) -> None:
+    mails: List[Mail] = []
+    weekly = due_weekly(st, now)
+    if weekly:
+        m = weekly_report(session, st.account, now, app_url)
+        st.last_weekly_at = now                                  # także gdy brak transakcji — nie próbujemy co 5 min
+        if m:
+            mails.append(m)
+    if st.prop_alerts:
+        mails += prop_alerts(session, st.account, now)
+    for m in mails:
+        m.to = st.email
+        m.subject = " ".join(m.subject.split())[:180]           # nagłówek w jednej linii (nazwy od użytkownika)
+        if send is None:
+            log.info("(bez SMTP) do %s: %s", m.to, m.subject)
+        else:
+            send(m)
+        sent["weekly" if m.kind == "weekly" else "alerts"] += 1
 
 
 def main(argv=None):
