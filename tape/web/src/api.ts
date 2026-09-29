@@ -77,7 +77,14 @@ export type AssetBias = {
 export type BiasResponse = {
   XAU: AssetBias;
   XAG: AssetBias;
-  track_record: { available: boolean; note: string };
+  track_record: {
+    available: boolean;
+    note: string;
+    observations?: number;
+    hit_rate?: number | null;
+    t_stat?: number | null;
+    labels_allowed?: boolean;
+  };
   sample: boolean;
 };
 
@@ -88,6 +95,22 @@ export type ImportReport = {
   duplicates: number;
   errors: string[];
   error_count: number;
+};
+
+export type Mapping = {
+  columns: Record<string, string>;
+  tz: string;
+  date_format: string | null;
+  buy_values: string[] | null;
+  sell_values: string[] | null;
+};
+
+export type SuggestResponse = {
+  headers: string[];
+  preview: Record<string, string | null>[];
+  rows: number;
+  ai_available: boolean;
+  suggestion: Mapping & { source: "heuristic" | "ai"; confidence: Record<string, number>; missing: string[]; notes: string };
 };
 
 export type SizeInput = {
@@ -163,11 +186,19 @@ export const api = {
   bias: () => get<BiasResponse>("/api/bias"),
   positionSize: (input: SizeInput) => post<SizeResult>("/api/tools/position-size", input),
   prop: (input: PropInput) => post<PropResponse>("/api/prop/evaluate", input),
-  async importFile(file: File, broker: string, tz: string): Promise<ImportReport> {
+  async suggestMapping(file: File): Promise<SuggestResponse> {
     const body = new FormData();
     body.append("file", file);
-    if (broker !== "auto") body.append("broker", broker);
-    if (tz) body.append("tz", tz);
+    const res = await fetch("/api/imports/suggest", { method: "POST", body });
+    if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+    return res.json() as Promise<SuggestResponse>;
+  },
+  async importFile(file: File, broker: string, tz: string, mapping?: Mapping): Promise<ImportReport> {
+    const body = new FormData();
+    body.append("file", file);
+    if (mapping) body.append("mapping", JSON.stringify(mapping));
+    else if (broker !== "auto") body.append("broker", broker);
+    if (tz && !mapping) body.append("tz", tz);
     const res = await fetch("/api/imports", { method: "POST", body });
     if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
     return res.json() as Promise<ImportReport>;

@@ -120,7 +120,8 @@ export function GlobePage() {
             </div>
           )}
           <p className="rounded-md border border-line bg-surface px-2.5 py-2 leading-relaxed text-muted">
-            {bias.data?.track_record.available ? "" : <span className="text-warn">Trafność jeszcze niepoliczona. </span>}
+            {!bias.data?.track_record.available && <span className="text-warn">Trafność jeszcze niepoliczona. </span>}
+            {bias.data?.track_record.available && !bias.data.track_record.labels_allowed && <span className="text-warn">Jeszcze nieistotne statystycznie. </span>}
             {bias.data?.track_record.note} To analiza newsów, nie sygnał transakcyjny.
           </p>
         </section>

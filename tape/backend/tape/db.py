@@ -98,6 +98,7 @@ def make_sessionmaker(url: str | None = None) -> sessionmaker:
     url = url or os.getenv("DATABASE_URL", "sqlite:///tape.db")
     kwargs = {"connect_args": {"check_same_thread": False}} if url.startswith("sqlite") else {}
     engine = create_engine(url, **kwargs)
+    from .news import store  # noqa: F401 — rejestruje tabele newsów w metadanych
     Base.metadata.create_all(engine)
     return sessionmaker(engine, expire_on_commit=False)
 

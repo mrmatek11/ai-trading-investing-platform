@@ -24,6 +24,8 @@ from .engine import stats
 from .engine import prop, risk
 from .engine.positions import build_positions
 from .importers import BROKERS, generic, parse_file
+from .news import store as news_store
+from .news import track_record
 from .news.bias import aggregate, event_to_dict
 from .news.sample import sample_events
 
@@ -53,8 +55,18 @@ class PropRequest(BaseModel):
     account: str = "default"
 
 
-def create_app(database_url: Optional[str] = None) -> FastAPI:
+def default_ai_client():
+    """Klient Claude tylko gdy skonfigurowano klucz — bez niego funkcje AI mają działający fallback."""
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        return None
+    import anthropic
+
+    return anthropic.Anthropic()
+
+
+def create_app(database_url: Optional[str] = None, ai_client=None) -> FastAPI:
     Session = make_sessionmaker(database_url)
+    ai = ai_client if ai_client is not None else default_ai_client()
     token = os.getenv("TAPE_API_TOKEN", "")
 
     async def auth(request: Request):
@@ -74,6 +86,28 @@ def create_app(database_url: Optional[str] = None) -> FastAPI:
     def health():
         return {"status": "ok", "time": datetime.now(timezone.utc).isoformat()}
 
+    @app.post("/api/imports/suggest")
+    async def suggest_mapping(file: UploadFile = File(...)):
+        """Nagłówki, podgląd i propozycja mapowania kolumn dla nierozpoznanego pliku."""
+        from .importers.base import read_rows
+        from .importers.suggest import suggest
+
+        data = await file.read()
+        if len(data) > MAX_UPLOAD_BYTES:
+            raise HTTPException(status_code=413, detail="Plik większy niż 10 MB")
+        rows = read_rows(data, file.filename or "upload.csv")
+        if not rows:
+            raise HTTPException(status_code=400, detail="Nie znaleziono wierszy z danymi")
+        headers = list(dict.fromkeys(k for r in rows[:50] for k in r))
+        try:
+            suggestion = suggest(headers, rows, ai)
+        except Exception as exc:  # awaria AI → i tak zwracamy heurystykę
+            suggestion = suggest(headers, rows, None)
+            suggestion["notes"] = f"AI niedostępne ({type(exc).__name__}); propozycja z heurystyki."
+        preview = [{h: (None if r.get(h) is None else str(r.get(h))) for h in headers} for r in rows[:8]]
+        return {"headers": headers, "preview": preview, "rows": len(rows), "suggestion": suggestion,
+                "ai_available": ai is not None}
+
     @app.post("/api/imports")
     async def import_file(
         file: UploadFile = File(...),
@@ -90,7 +124,8 @@ def create_app(database_url: Optional[str] = None) -> FastAPI:
         parsed_mapping = None
         if mapping:
             try:
-                parsed_mapping = generic.Mapping(**json.loads(mapping))
+                raw = {k: v for k, v in json.loads(mapping).items() if v is not None}
+                parsed_mapping = generic.Mapping(**raw)
             except (ValueError, TypeError) as exc:
                 raise HTTPException(status_code=400, detail=f"Niepoprawne mapowanie: {exc}") from exc
         result = parse_file(data, file.filename or "upload.csv", broker=broker if broker != "generic" else None,
@@ -161,24 +196,71 @@ def create_app(database_url: Optional[str] = None) -> FastAPI:
                                for k, v in sims.items()},
                 "note": "Liczone na saldzie po zamknięciu transakcji; firmy liczą też equity z otwartymi pozycjami."}
 
+    def current_events(now: datetime):
+        """Zdarzenia z pipeline'u newsów; dopóki go nie uruchomiono — przykładowe (oznaczone)."""
+        with Session() as s:
+            stored = news_store.recent_events(s, now)
+        return (stored, False) if stored else (sample_events(now), True)
+
     @app.get("/api/events")
     def events():
         now = datetime.now(timezone.utc)
-        return [event_to_dict(e, now) for e in sample_events(now)]
+        evts, _ = current_events(now)
+        return [event_to_dict(e, now) for e in evts]
 
     @app.get("/api/bias")
     def bias():
         now = datetime.now(timezone.utc)
-        evts = sample_events(now)
+        evts, sample = current_events(now)
         out = {}
         for asset in ("XAU", "XAG"):
             b = aggregate(evts, asset, now)
             out[asset] = {"score": b.score, "label": b.label, "strength": b.strength,
                           "events_used": b.events_used,
                           "drivers": [d.__dict__ for d in b.drivers]}
-        # Trafność liczona z logu ocen (append-only); dopóki go nie ma — uczciwie: brak danych.
-        out["track_record"] = {"available": False, "note": "Trafność pojawi się po okresie działania w trybie shadow."}
-        out["sample"] = True
+        with Session() as s:
+            snaps = [(x.ts, x.score, x.label) for x in news_store.snapshots(s, "XAU")]
+            prices = news_store.price_series(s, "XAU")
+        tr = track_record.evaluate(snaps, prices)
+        if tr.observations == 0:
+            note = ("Trafność pojawi się po okresie działania pipeline'u w trybie shadow."
+                    if not snaps else f"Zapisanych ocen: {len(snaps)} — czekamy na ceny po ich horyzoncie.")
+        else:
+            note = (f"Trafność XAU poza próbą: {tr.hit_rate:.1%} · n = {tr.observations} · "
+                    f"t = {tr.t_stat:.1f}" if tr.t_stat is not None else f"n = {tr.observations}")
+        out["track_record"] = {
+            "available": tr.observations > 0, "observations": tr.observations, "hit_rate": tr.hit_rate,
+            "t_stat": tr.t_stat, "baseline_long_return": tr.baseline_long_return,
+            "mean_signed_return": tr.mean_signed_return, "labels_allowed": tr.labels_allowed, "note": note,
+        }
+        out["sample"] = sample
         return out
+
+    @app.post("/api/prices")
+    async def upload_prices(file: UploadFile = File(...), asset: str = Form("XAU")):
+        """CSV z cenami do liczenia trafności: kolumny czasu (timestamp/date/time) i ceny (close/price)."""
+        from .importers.base import norm_header, read_rows, to_utc
+
+        data = await file.read()
+        if len(data) > MAX_UPLOAD_BYTES * 5:
+            raise HTTPException(status_code=413, detail="Plik za duży")
+        rows = read_rows(data, file.filename or "prices.csv")
+        if not rows:
+            raise HTTPException(status_code=400, detail="Pusty plik")
+        cols = set(rows[0])
+        t_col = next((c for c in ("timestamp", "date", "time", "datetime") if c in cols), None)
+        p_col = next((c for c in ("close", "price") if c in cols), None)
+        if not t_col or not p_col:
+            raise HTTPException(status_code=400, detail=f"Brak kolumn czasu/ceny; są: {sorted(cols)}")
+        parsed = []
+        for r in rows:
+            try:
+                parsed.append((to_utc(r[t_col]), float(str(r[p_col]).replace(",", "."))))
+            except (ValueError, KeyError, TypeError):
+                continue
+        with Session() as s:
+            n = news_store.add_prices(s, norm_header(asset).upper(), parsed)
+            s.commit()
+        return {"added": n, "rows": len(rows)}
 
     return app

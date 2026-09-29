@@ -1,11 +1,13 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { api, type ImportReport } from "../api";
+import { api, type ImportReport, type Mapping, type SuggestResponse } from "../api";
+import { MappingStep } from "../components/MappingStep";
 
 const BROKERS = [
   { value: "auto", label: "Wykryj automatycznie" },
   { value: "xtb", label: "XTB · zamknięte pozycje (XLSX/CSV)" },
   { value: "mt5", label: "MetaTrader 5 · lista transakcji (Deals)" },
+  { value: "custom", label: "Inny broker — dopasuj kolumny" },
 ];
 
 const TZ_HINT: Record<string, string> = {
@@ -18,11 +20,22 @@ export function ImportPage() {
   const [file, setFile] = useState<File | null>(null);
   const [broker, setBroker] = useState("auto");
   const [tz, setTz] = useState("");
-  const mutation = useMutation<ImportReport, Error>({
-    mutationFn: () => api.importFile(file!, broker, tz),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["stats"] });
-      qc.invalidateQueries({ queryKey: ["positions"] });
+  const [suggestion, setSuggestion] = useState<SuggestResponse | null>(null);
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: ["stats"] });
+    qc.invalidateQueries({ queryKey: ["positions"] });
+  };
+  const suggest = useMutation<SuggestResponse, Error>({
+    mutationFn: () => api.suggestMapping(file!),
+    onSuccess: setSuggestion,
+  });
+  const mutation = useMutation<ImportReport, Error, Mapping | undefined>({
+    mutationFn: (mapping) => api.importFile(file!, broker, tz, mapping),
+    onSuccess: (report, mapping) => {
+      refresh();
+      if (mapping) setSuggestion(null);
+      // nierozpoznany format → od razu proponujemy mapowanie kolumn
+      else if (!report.detected && report.fills === 0) suggest.mutate();
     },
   });
   const report = mutation.data;
@@ -38,13 +51,25 @@ export function ImportPage() {
         className="flex flex-col gap-4 rounded-md border border-line p-5"
         onSubmit={(e) => {
           e.preventDefault();
-          if (file) mutation.mutate();
+          if (!file) return;
+          setSuggestion(null);
+          if (broker === "custom") suggest.mutate();
+          else mutation.mutate(undefined);
         }}
       >
         <label className="flex flex-col gap-2 rounded-md border border-dashed border-[#34343a] p-6 text-center hover:border-muted">
           <span>{file ? file.name : "Wybierz plik z historią transakcji"}</span>
           <span className="text-xs text-muted">CSV · XLSX — XTB, MetaTrader 5</span>
-          <input type="file" accept=".csv,.xlsx,.xlsm,.txt" className="sr-only" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+          <input
+            type="file"
+            accept=".csv,.xlsx,.xlsm,.txt"
+            className="sr-only"
+            onChange={(e) => {
+              setFile(e.target.files?.[0] ?? null);
+              setSuggestion(null);
+              mutation.reset();
+            }}
+          />
         </label>
 
         <div className="grid gap-4 sm:grid-cols-2">
@@ -69,14 +94,19 @@ export function ImportPage() {
           </label>
         </div>
 
-        <button type="submit" disabled={!file || mutation.isPending} className="h-10 rounded-md bg-fg font-medium text-bg disabled:opacity-40">
-          {mutation.isPending ? "Importuję…" : "Importuj"}
+        <button type="submit" disabled={!file || mutation.isPending || suggest.isPending} className="h-10 rounded-md bg-fg font-medium text-bg disabled:opacity-40">
+          {mutation.isPending ? "Importuję…" : suggest.isPending ? "Analizuję kolumny…" : broker === "custom" ? "Dalej: mapowanie kolumn" : "Importuj"}
         </button>
       </form>
 
+      {suggest.isError && <p role="alert" className="text-neg">Nie udało się odczytać pliku: {suggest.error.message}</p>}
+      {suggestion && (
+        <MappingStep data={suggestion} pending={mutation.isPending} onSubmit={(m) => mutation.mutate(m)} onCancel={() => setSuggestion(null)} />
+      )}
+
       {mutation.isError && <p role="alert" className="text-neg">Import nie powiódł się: {mutation.error.message}</p>}
 
-      {report && (
+      {report && !suggestion && !suggest.isPending && (
         <section aria-label="Raport importu" className="rounded-md border border-line p-5">
           <h2 className="mb-3 text-[13px] font-medium">
             Raport importu{report.detected ? ` · format: ${report.detected.toUpperCase()}` : ""}

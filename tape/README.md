@@ -13,12 +13,15 @@ research: [`../docs/RESEARCH.md`](../docs/RESEARCH.md).
 |--------|------|
 | Import XTB (zamknięte pozycje, XLSX/CSV) | ✅ czas Europe/Warsaw → UTC, SL, wielkość kontraktu z P/L brokera |
 | Import MetaTrader 5 (Deals, CSV/XLSX) | ✅ czas serwera → UTC (domyślnie UTC+2, do zmiany) |
-| Import dowolnego CSV z mapowaniem kolumn | ✅ backend (`importers/generic.py`); kreator z AI — następny krok |
+| Import dowolnego CSV z mapowaniem kolumn | ✅ kreator: heurystyka (bez AI) albo propozycja Claude, podgląd, zatwierdzenie |
 | Silnik pozycji | ✅ FIFO na `Decimal`, dokładki, częściowe zamknięcia, odwrócenia, R z initial SL |
 | Statystyki | ✅ PnL, win rate, PF, drawdown, t-stat, segmenty z testem istotności (w tym „po stracie”) |
 | Globus zdarzeń 3D | ✅ globe.gl: warstwy, XAU/XAG, obrót do wybranego zdarzenia, pierścienie dla nowych |
-| Nastawienie newsów XAU/XAG | ✅ agregacja w kodzie; klasyfikator Claude gotowy, **zdarzenia na razie przykładowe** |
-| Logowanie, płatności, pipeline newsów na żywo | ⏳ następne kroki |
+| Nastawienie newsów XAU/XAG | ✅ agregacja w kodzie; bez uruchomionego pipeline'u UI pokazuje zdarzenia przykładowe (oznaczone) |
+| Pipeline newsów (tryb shadow) | ✅ GDELT → grupowanie → Claude → log ocen (append-only) → trafność vs ceny (`/api/prices`) |
+| Kalkulator pozycji (złoto / srebro) | ✅ zaokrąglanie w dół, ostrzeżenia względem dziennego zasięgu i limitu prop firmy |
+| Reguły prop firm | ✅ dzienny limit, drawdown statyczny / trailing, symulacja tej samej historii na 3 typach kont |
+| Logowanie, płatności | ⏳ wymagają kont Clerk i Paddle |
 
 ## Uruchomienie
 
@@ -34,6 +37,12 @@ cd tape/web
 npm install
 npm run dev                                              # http://127.0.0.1:5173 (proxy /api → :8000)
 npm run build                                            # typecheck + build produkcyjny
+
+# pipeline newsów w trybie shadow (np. co 15 min); wymaga ANTHROPIC_API_KEY
+cd tape/backend
+python -m tape.news.pipeline --every 900
+# ceny do liczenia trafności (CSV: timestamp, close)
+curl -F file=@xauusd_h1.csv -F asset=XAU http://127.0.0.1:8000/api/prices
 ```
 
 Zmienne środowiskowe:
@@ -42,7 +51,7 @@ Zmienne środowiskowe:
 |---------|-----------|
 | `DATABASE_URL` | domyślnie `sqlite:///tape.db`; produkcyjnie PostgreSQL |
 | `TAPE_API_TOKEN` | opcjonalny token (nagłówek `Authorization: Bearer …`) do czasu wdrożenia logowania |
-| `ANTHROPIC_API_KEY` | dla klasyfikatora newsów (`tape/news/classify.py`) |
+| `ANTHROPIC_API_KEY` | klasyfikator newsów i propozycje mapowania CSV; bez klucza działają fallbacki |
 
 ## Stack
 

@@ -20,7 +20,7 @@
 | 7 | Minimalistyczny design | Makieta + tokeny w aplikacji | 5, makieta |
 | 8 | Skupienie na złocie i srebrze | Przyjęte jako główny rynek | 1 |
 | 9 | Globus 3D ze zdarzeniami (wojny, banki centralne, makro, newsy) | **W budowie** (globe.gl) | 2.5, `tape/web` |
-| 10 | AI: analiza newsów → long / short | Specyfikacja + agregacja w kodzie; trafność liczona uczciwie | 4.6 |
+| 10 | AI: analiza newsów → long / short | **Pipeline w trybie shadow gotowy** (GDELT → Claude → log ocen → trafność) | 4.6, `tape/backend/tape/news/` |
 | 11 | Przetestować strategię na złocie i kilka innych | **Zrobione** | `BACKTEST_RESULTS.md` |
 
 ## 2. Problemy ludzi i odpowiedź Tape
@@ -47,8 +47,8 @@
 
 ## 4. Backlog pomysłów z researchu
 
-1. Kalkulator pozycji dla złota (ATR, dzienny zasięg, dzienny limit prop firmy) — szybki, darmowy lead magnet.
-2. Symulator reguł prop firm (trailing vs statyczny DD, dzienny limit) na Twojej historii: „na którym koncie przeżyłbyś ten miesiąc?”.
+1. ✅ Kalkulator pozycji dla złota (ATR, dzienny zasięg, dzienny limit prop firmy) — szybki, darmowy lead magnet.
+2. ✅ Symulator reguł prop firm (trailing vs statyczny DD, dzienny limit) na Twojej historii: „na którym koncie przeżyłbyś ten miesiąc?”.
 3. Alert „okno newsowe” zsynchronizowany z kalendarzem i regułami firmy.
 4. Kreator IBKR Flex Query z gotowym szablonem zapytania.
 5. Panel „zdrowie importu”: ostatni sync, rozbieżności sald, brakujące dni.
