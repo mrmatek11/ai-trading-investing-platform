@@ -14,6 +14,7 @@
     "@tanstack/react-router": "^1.170.40",
     "globe.gl": "^2.46.2",
     "h3-js": "^4.5.0",
+    "lightweight-charts": "^5.2.1",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "three": "^0.186.1",

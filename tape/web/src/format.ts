@@ -22,6 +22,14 @@ export function r(v: number | null): string {
   return v == null ? "—" : `${money(v, 2)}R`;
 }
 
+/** Cena z API (tekst Decimal) → 2–5 miejsc po przecinku, bez zbędnych zer. */
+export function price(v: string | null | undefined): string {
+  if (v == null) return "—";
+  const n = Number(v);
+  if (!Number.isFinite(n)) return v;
+  return new Intl.NumberFormat("pl-PL", { minimumFractionDigits: 2, maximumFractionDigits: 5 }).format(n);
+}
+
 export function tone(v: number | null | undefined): string {
   if (v == null || v === 0) return "text-fg";
   return v > 0 ? "text-pos" : "text-neg";

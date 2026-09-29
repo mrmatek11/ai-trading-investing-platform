@@ -16,6 +16,8 @@ research: [`../docs/RESEARCH.md`](../docs/RESEARCH.md).
 | Import dowolnego CSV z mapowaniem kolumn | ✅ kreator: heurystyka (bez AI) albo propozycja Claude, podgląd, zatwierdzenie |
 | Silnik pozycji | ✅ FIFO na `Decimal`, dokładki, częściowe zamknięcia, odwrócenia, R z initial SL |
 | Statystyki | ✅ PnL, win rate, PF, drawdown, t-stat, segmenty z testem istotności (w tym „po stracie”) |
+| Szczegóły transakcji | ✅ wykres (Lightweight Charts) z IN/OUT/SL na cenach z `/api/prices`, wykonania, journal |
+| Playbooki i błędy | ✅ setupy z checklistą reguł, taksonomia błędów, wynik per setup i per błąd; ręczny SL → R dla MT5 |
 | Globus zdarzeń 3D | ✅ globe.gl: warstwy, XAU/XAG, obrót do wybranego zdarzenia, pierścienie dla nowych |
 | Nastawienie newsów XAU/XAG | ✅ agregacja w kodzie; bez uruchomionego pipeline'u UI pokazuje zdarzenia przykładowe (oznaczone) |
 | Pipeline newsów (tryb shadow) | ✅ GDELT → grupowanie → Claude → log ocen (append-only) → trafność vs ceny (`/api/prices`) |

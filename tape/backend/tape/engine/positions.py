@@ -11,6 +11,7 @@ Zasady:
 
 from __future__ import annotations
 
+import hashlib
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -46,6 +47,12 @@ class Position:
     broker_pnl_complete: bool = True
     initial_stop: Optional[Decimal] = None
     fill_ids: List[str] = field(default_factory=list)
+
+    @property
+    def key(self) -> str:
+        """Stabilny identyfikator: pozycja zaczyna się zawsze od tego samego fill-a otwierającego,
+        więc klucz przeżywa ponowne przeliczenie pozycji od zera (notatki z journala się nie gubią)."""
+        return hashlib.sha1(self.fill_ids[0].encode()).hexdigest()[:12]
 
     @property
     def is_open(self) -> bool:

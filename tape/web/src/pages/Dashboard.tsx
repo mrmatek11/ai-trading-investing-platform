@@ -100,9 +100,11 @@ export function Dashboard() {
               </tr>
             </thead>
             <tbody>
-              {(positions.data ?? []).filter((p) => p.closed_at).slice(0, 8).map((p, i) => (
-                <tr key={i} className="border-b border-line-soft last:border-0">
-                  <td className="num px-4 py-2 text-muted">{when(p.closed_at!)}</td>
+              {(positions.data ?? []).filter((p) => p.closed_at).slice(0, 8).map((p) => (
+                <tr key={p.key} className="border-b border-line-soft last:border-0 hover:bg-surface">
+                  <td className="num px-4 py-2 text-muted">
+                    <Link to="/trades/$key" params={{ key: p.key }} className="hover:text-fg">{when(p.closed_at!)}</Link>
+                  </td>
                   <td className="num px-2 py-2">{p.symbol}</td>
                   <td className="px-2 py-2 text-muted">{p.direction === "long" ? "Long" : "Short"}</td>
                   <td className={`num px-2 py-2 text-right ${tone(p.r_multiple)}`}>{r(p.r_multiple)}</td>
@@ -113,6 +115,7 @@ export function Dashboard() {
           </table>
         </section>
 
+        <div className="flex flex-col gap-4">
         <section aria-label="Wnioski" className="rounded-md border border-line px-4 py-3">
           <h2 className="mb-1 text-[13px] font-medium">Wnioski</h2>
           {insights.length ? (
@@ -123,6 +126,23 @@ export function Dashboard() {
             </p>
           )}
         </section>
+
+        <section aria-label="Wynik transakcji z błędami" className="rounded-md border border-line px-4 py-3">
+          <h2 className="mb-1 text-[13px] font-medium">Wynik transakcji z błędami</h2>
+          {stats.data!.mistakes.length ? (
+            <ul>
+              {stats.data!.mistakes.slice(0, 5).map((m) => (
+                <li key={m.key} className="flex justify-between gap-3 border-b border-line-soft py-2 last:border-0">
+                  <span className="truncate">{m.key} <span className="num text-muted">· {m.trades}</span></span>
+                  <span className={`num ${tone(m.net_pnl)}`}>{money(m.net_pnl)}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="leading-relaxed text-muted">Oznaczaj błędy w szczegółach transakcji — policzymy, ile każdy kosztuje.</p>
+          )}
+        </section>
+        </div>
       </div>
     </div>
   );

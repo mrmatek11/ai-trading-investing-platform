@@ -11,17 +11,17 @@ from __future__ import annotations
 import hmac
 import json
 import os
-from datetime import datetime, timezone
-from typing import Optional
-
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from typing import Optional
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 
+from . import journal
 from .db import ImportRow, load_fills, make_sessionmaker, store_fills
-from .engine import stats
-from .engine import prop, risk
+from .engine import prop, risk, stats
 from .engine.positions import build_positions
 from .importers import BROKERS, generic, parse_file
 from .news import store as news_store
@@ -43,6 +43,20 @@ class SizeRequest(BaseModel):
     max_lot: Decimal | None = Field(None, gt=0)
     daily_range: Decimal | None = Field(None, gt=0)
     daily_loss_limit: Decimal | None = Field(None, gt=0)
+
+
+class SetupIn(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    description: str = Field("", max_length=2000)
+    rules: list[str] = Field(default_factory=list, max_length=20)
+
+
+class JournalIn(BaseModel):
+    setup_id: int | None = None
+    checklist: dict[str, bool] = Field(default_factory=dict)
+    mistakes: list[str] = Field(default_factory=list, max_length=12)
+    notes: str = Field("", max_length=10000)
+    initial_stop: Decimal | None = Field(None, gt=0)
 
 
 class PropRequest(BaseModel):
@@ -80,7 +94,26 @@ def create_app(database_url: Optional[str] = None, ai_client=None) -> FastAPI:
 
     def positions_for(account: str):
         with Session() as s:
-            return build_positions(load_fills(s, account))
+            items = build_positions(load_fills(s, account))
+            journal.apply_manual_stops(items, journal.entries_by_key(s, account))
+            return items
+
+    def position_dict(p, entry=None, setups=None):
+        return {
+            "key": p.key, "symbol": p.symbol, "direction": "long" if p.direction == 1 else "short",
+            "opened_at": p.opened_at.isoformat(), "closed_at": p.closed_at.isoformat() if p.closed_at else None,
+            "qty": str(p.qty), "avg_entry": str(round(p.avg_entry, 5)),
+            "avg_exit": str(round(p.avg_exit, 5)) if p.avg_exit is not None else None,
+            "net_pnl": float(round(p.net_pnl, 2)), "fees": float(round(p.fees, 2)),
+            "r_multiple": float(round(p.r_multiple, 2)) if p.r_multiple is not None else None,
+            "initial_stop": str(p.initial_stop) if p.initial_stop is not None else None,
+            "setup": setups[entry.setup_id].name if entry and setups and entry.setup_id in setups else None,
+            "mistakes": list(entry.mistakes or []) if entry else [],
+            "has_notes": bool(entry and entry.notes),
+        }
+
+    def load_setups(s, account: str):
+        return {x.id: x for x in s.scalars(select(journal.Setup).where(journal.Setup.account == account))}
 
     @app.get("/api/health")
     def health():
@@ -143,20 +176,120 @@ def create_app(database_url: Optional[str] = None, ai_client=None) -> FastAPI:
     def positions(account: str = "default", limit: int = 200):
         items = positions_for(account)
         items.sort(key=lambda p: p.closed_at or p.opened_at, reverse=True)
-        return [{
-            "symbol": p.symbol, "direction": "long" if p.direction == 1 else "short",
-            "opened_at": p.opened_at.isoformat(), "closed_at": p.closed_at.isoformat() if p.closed_at else None,
-            "qty": str(p.qty), "avg_entry": str(round(p.avg_entry, 5)),
-            "avg_exit": str(round(p.avg_exit, 5)) if p.avg_exit is not None else None,
-            "net_pnl": float(round(p.net_pnl, 2)), "fees": float(round(p.fees, 2)),
-            "r_multiple": float(round(p.r_multiple, 2)) if p.r_multiple is not None else None,
-            "initial_stop": str(p.initial_stop) if p.initial_stop is not None else None,
-        } for p in items[:limit]]
+        with Session() as s:
+            entries = journal.entries_by_key(s, account)
+            setups = load_setups(s, account)
+        return [position_dict(p, entries.get(p.key), setups) for p in items[:limit]]
+
+    @app.get("/api/positions/{key}")
+    def position_detail(key: str, account: str = "default"):
+        items = positions_for(account)
+        p = next((x for x in items if x.key == key), None)
+        if p is None:
+            raise HTTPException(status_code=404, detail="Nie ma takiej pozycji")
+        with Session() as s:
+            entry = journal.entries_by_key(s, account).get(key)
+            setups = load_setups(s, account)
+            fills = [f for f in load_fills(s, account) if f.external_id in set(p.fill_ids)]
+            asset = {"XAUUSD": "XAU", "XAGUSD": "XAG"}.get(p.symbol, p.symbol)
+            start = p.opened_at - timedelta(days=2)
+            end = (p.closed_at or datetime.now(timezone.utc)) + timedelta(days=1)
+            prices = [(t, v) for t, v in news_store.price_series(s, asset) if start <= t <= end][-3000:]
+        return {
+            "position": position_dict(p, entry, setups),
+            "fills": [{"id": f.external_id, "ts": f.ts.isoformat(), "side": f.side, "qty": str(f.qty),
+                       "price": str(f.price), "fee": float(f.fee),
+                       "broker_pnl": float(f.broker_pnl) if f.broker_pnl is not None else None} for f in fills],
+            "journal": None if entry is None else {
+                "setup_id": entry.setup_id, "checklist": entry.checklist or {}, "mistakes": entry.mistakes or [],
+                "notes": entry.notes, "initial_stop": str(entry.initial_stop) if entry.initial_stop is not None else None,
+            },
+            "prices": [{"t": t.isoformat(), "p": v} for t, v in prices],
+        }
+
+    @app.put("/api/positions/{key}/journal")
+    def save_journal(key: str, body: JournalIn, account: str = "default"):
+        p = next((x for x in positions_for(account) if x.key == key), None)
+        if p is None:
+            raise HTTPException(status_code=404, detail="Nie ma takiej pozycji")
+        if body.initial_stop is not None and (p.avg_entry - body.initial_stop) * p.direction <= 0:
+            side = "poniżej" if p.direction == 1 else "powyżej"
+            raise HTTPException(status_code=400, detail=f"Stop loss musi być {side} ceny wejścia {round(p.avg_entry, 2)}")
+        with Session() as s:
+            if body.setup_id is not None and body.setup_id not in load_setups(s, account):
+                raise HTTPException(status_code=400, detail="Nieznany setup")
+            entry = journal.entries_by_key(s, account).get(key) or journal.JournalEntry(account=account, position_key=key)
+            entry.setup_id = body.setup_id
+            entry.checklist = body.checklist
+            entry.mistakes = [m.strip()[:80] for m in body.mistakes if m.strip()]
+            entry.notes = body.notes
+            entry.initial_stop = body.initial_stop
+            entry.updated_at = datetime.now(timezone.utc)
+            s.add(entry)
+            s.commit()
+        return {"ok": True}
+
+    @app.get("/api/journal/meta")
+    def journal_meta():
+        return {"mistakes": journal.MISTAKES}
+
+    @app.get("/api/setups")
+    def list_setups(account: str = "default"):
+        items = positions_for(account)
+        with Session() as s:
+            setups = load_setups(s, account)
+            entries = journal.entries_by_key(s, account)
+        by_name = {g.key: g for g in journal.setup_stats(items, entries, setups)}
+        return [{"id": x.id, "name": x.name, "description": x.description, "rules": x.rules or [],
+                 "stats": stats.as_dict(by_name[x.name]) if x.name in by_name else None}
+                for x in sorted(setups.values(), key=lambda v: v.name.lower())]
+
+    @app.post("/api/setups", status_code=201)
+    def create_setup(body: SetupIn, account: str = "default"):
+        with Session() as s:
+            if body.name.strip() in {x.name for x in load_setups(s, account).values()}:
+                raise HTTPException(status_code=409, detail="Setup o tej nazwie już istnieje")
+            row = journal.Setup(account=account, name=body.name.strip(), description=body.description,
+                                rules=[r.strip() for r in body.rules if r.strip()])
+            s.add(row)
+            s.commit()
+            return {"id": row.id}
+
+    @app.put("/api/setups/{setup_id}")
+    def update_setup(setup_id: int, body: SetupIn, account: str = "default"):
+        with Session() as s:
+            setups = load_setups(s, account)
+            row = setups.get(setup_id)
+            if row is None:
+                raise HTTPException(status_code=404, detail="Nie ma takiego setupu")
+            if any(x.name == body.name.strip() and x.id != setup_id for x in setups.values()):
+                raise HTTPException(status_code=409, detail="Setup o tej nazwie już istnieje")
+            row.name, row.description = body.name.strip(), body.description
+            row.rules = [r.strip() for r in body.rules if r.strip()]
+            s.commit()
+        return {"ok": True}
+
+    @app.delete("/api/setups/{setup_id}")
+    def delete_setup(setup_id: int, account: str = "default"):
+        with Session() as s:
+            row = load_setups(s, account).get(setup_id)
+            if row is None:
+                raise HTTPException(status_code=404, detail="Nie ma takiego setupu")
+            for e in s.scalars(select(journal.JournalEntry).where(journal.JournalEntry.setup_id == setup_id)):
+                e.setup_id = None      # SQLite bez PRAGMA foreign_keys nie wykona ON DELETE SET NULL
+            s.delete(row)
+            s.commit()
+        return {"ok": True}
 
     @app.get("/api/stats")
     def get_stats(account: str = "default"):
         items = positions_for(account)
+        with Session() as s:
+            entries = journal.entries_by_key(s, account)
+            setups = load_setups(s, account)
         return {
+            "setups": [stats.as_dict(g) for g in journal.setup_stats(items, entries, setups)],
+            "mistakes": [stats.as_dict(g) for g in journal.mistake_costs(items, entries)],
             "summary": stats.as_dict(stats.summarize(items)),
             "equity": stats.equity_curve(items),
             "segments": [stats.as_dict(x) for x in stats.segments(items)],

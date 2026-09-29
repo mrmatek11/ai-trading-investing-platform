@@ -26,13 +26,21 @@ export type Segment = {
   significant: boolean;
 };
 
+export type GroupStats = { key: string; trades: number; net_pnl: number; win_rate: number; avg_pnl: number; avg_r: number | null };
+
 export type Stats = {
+  setups: GroupStats[];
+  mistakes: GroupStats[];
   summary: Summary;
   equity: { t: string; equity: number }[];
   segments: Segment[];
 };
 
 export type Position = {
+  key: string;
+  setup: string | null;
+  mistakes: string[];
+  has_notes: boolean;
   symbol: string;
   direction: "long" | "short";
   opened_at: string;
@@ -45,6 +53,24 @@ export type Position = {
   r_multiple: number | null;
   initial_stop: string | null;
 };
+
+export type JournalData = {
+  setup_id: number | null;
+  checklist: Record<string, boolean>;
+  mistakes: string[];
+  notes: string;
+  initial_stop: string | null;
+};
+
+export type PositionDetail = {
+  position: Position;
+  fills: { id: string; ts: string; side: "buy" | "sell"; qty: string; price: string; fee: number; broker_pnl: number | null }[];
+  journal: JournalData | null;
+  prices: { t: string; p: number }[];
+};
+
+export type Setup = { id: number; name: string; description: string; rules: string[]; stats: GroupStats | null };
+export type SetupInput = { name: string; description: string; rules: string[] };
 
 export type Impact = { direction: -1 | 0 | 1; magnitude: number; horizon: string };
 
@@ -162,7 +188,15 @@ export type PropResponse = {
 };
 
 async function post<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  return send<T>("POST", path, body);
+}
+
+async function send<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const res = await fetch(path, {
+    method,
+    headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
   if (!res.ok) {
     const detail = await res.json().catch(() => null);
     const d = detail?.detail;
@@ -186,6 +220,14 @@ export const api = {
   bias: () => get<BiasResponse>("/api/bias"),
   positionSize: (input: SizeInput) => post<SizeResult>("/api/tools/position-size", input),
   prop: (input: PropInput) => post<PropResponse>("/api/prop/evaluate", input),
+  position: (key: string) => get<PositionDetail>(`/api/positions/${encodeURIComponent(key)}`),
+  saveJournal: (key: string, body: Omit<JournalData, "initial_stop"> & { initial_stop: number | null }) =>
+    send<{ ok: boolean }>("PUT", `/api/positions/${encodeURIComponent(key)}/journal`, body),
+  journalMeta: () => get<{ mistakes: string[] }>("/api/journal/meta"),
+  setups: () => get<Setup[]>("/api/setups"),
+  createSetup: (body: SetupInput) => send<{ id: number }>("POST", "/api/setups", body),
+  updateSetup: (id: number, body: SetupInput) => send<{ ok: boolean }>("PUT", `/api/setups/${id}`, body),
+  deleteSetup: (id: number) => send<{ ok: boolean }>("DELETE", `/api/setups/${id}`),
   async suggestMapping(file: File): Promise<SuggestResponse> {
     const body = new FormData();
     body.append("file", file);
