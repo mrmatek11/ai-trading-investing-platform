@@ -68,3 +68,40 @@ def test_api_prop_accounts_per_book(tmp_path):
     assert c.delete(f"/api/prop/accounts/{pid}", headers=b).status_code == 404
     assert c.put("/api/prop/accounts", headers=a, json={**body, "day_tz": "Mars/Base"}).status_code == 400
     assert c.delete(f"/api/prop/accounts/{pid}", headers=a).json() == {"ok": True}
+
+
+def test_floating_loss_counts_against_limits():
+    pos = build_positions(trade(1, utc(2026, 9, 29, 10), -2000))
+    now = utc(2026, 9, 29, 15)
+    closed_only = prop.today_status(pos, RULES, now)
+    with_open = prop.today_status(pos, RULES, now, floating=D(-1800))
+    assert closed_only.daily_left == D(3000) and closed_only.level == "ok"
+    assert with_open.daily_left == D(1200) and with_open.level == "danger" and with_open.floating == D(-1800)
+    assert with_open.overall_left == D(6200)
+    blown = prop.today_status(pos, RULES, now, floating=D(-3500))
+    assert blown.daily_left == 0 and blown.level == "breached"
+    assert prop.today_status(pos, RULES, now, floating=D(500)).daily_left == D(3500)
+
+
+def test_api_uses_fresh_mt5_equity_only(tmp_path):
+    from tape.api import create_app
+    from tape.db import make_sessionmaker
+    from tape.sync import EquityRow
+
+    url = f"sqlite:///{tmp_path / 'e.db'}"
+    c = TestClient(create_app(url))
+    conn = c.post("/api/connections/mt5", json={"label": "FTMO"}).json()
+    body = {"book": conn["id"], "name": "FTMO", "initial_balance": 100000, "daily_loss_pct": 5, "max_drawdown_pct": 10,
+            "drawdown_type": "static", "profit_target_pct": 10, "day_tz": "UTC"}
+    c.put("/api/prop/accounts", json=body)
+    push = {"gmt_offset": 0, "deals": [], "account": {"balance": "100000", "equity": "96500", "currency": "USD"}}
+    assert c.post("/api/ingest/mt5", json=push, headers={"Authorization": f"Bearer {conn['token']}"}).status_code == 200
+    st = c.get("/api/prop/accounts").json()[0]
+    assert st["floating"] == -3500 and st["daily_left"] == 1500 and st["level"] == "warn" and st["equity_fresh"]
+
+    with make_sessionmaker(url)() as s:                     # odczyt sprzed godziny — już nie liczy się jako bieżący
+        row = s.get(EquityRow, conn["id"])
+        row.ts = datetime.now(timezone.utc) - timedelta(hours=1)
+        s.commit()
+    st = c.get("/api/prop/accounts").json()[0]
+    assert st["floating"] is None and st["daily_left"] == 5000 and st["equity_fresh"] is False

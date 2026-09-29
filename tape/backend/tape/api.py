@@ -646,8 +646,18 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
         now = datetime.now(timezone.utc)
         with Session() as s:
             rows = prop_rows(s, account)
-        return [prop_accounts.status_dict(r, prop.today_status(positions_for(account, r.book), r.rules(), now))
-                for r in rows]
+        out = []
+        for r in rows:
+            with Session() as s:
+                eq = broker_sync.latest_equity(s, account, r.book)
+            fresh = eq is not None and now - eq.ts <= timedelta(minutes=15)   # stary odczyt nie udaje bieżącego
+            st = prop.today_status(positions_for(account, r.book), r.rules(), now,
+                                   floating=(eq.equity - eq.balance) if fresh else None)
+            d = prop_accounts.status_dict(r, st)
+            d["equity_ts"] = eq.ts.isoformat() if eq else None
+            d["equity_fresh"] = fresh
+            out.append(d)
+        return out
 
     @app.put("/api/prop/accounts")
     def save_prop_account(body: PropAccountIn, account: str = Depends(current_account)):

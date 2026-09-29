@@ -303,6 +303,9 @@ export type PropAccountStatus = {
   daily_left: number;
   overall_limit: number;
   overall_left: number;
+  floating: number | null;
+  equity_ts: string | null;
+  equity_fresh: boolean;
   rules: { initial_balance: number; daily_loss_pct: number; max_drawdown_pct: number; drawdown_type: "static" | "trailing"; profit_target_pct: number | null; day_tz: string };
 };
 

@@ -8,12 +8,13 @@
 //|  3. Skopiuj plik do MQL5/Experts, skompiluj, przeciągnij na        |
 //|     dowolny wykres i wklej token w parametrach.                   |
 //|                                                                  |
-//| EA tylko czyta historię — nie składa, nie modyfikuje i nie         |
-//| zamyka zleceń. Wysyła transakcje od ostatniej udanej wysyłki;     |
+//| EA tylko czyta historię i stan konta — nie składa, nie modyfikuje  |
+//| i nie zamyka zleceń. Od 1.10 wysyła też balance i equity, żeby    |
+//| limity prop w Tape uwzględniały otwarte pozycje. Wysyła transakcje od ostatniej udanej wysyłki;     |
 //| serwer ignoruje duplikaty, więc ponowna wysyłka jest bezpieczna.   |
 //+------------------------------------------------------------------+
 #property copyright "Tape"
-#property version   "1.00"
+#property version   "1.10"
 #property strict
 
 input string TapeUrl       = "https://app.tape.example";  // adres Tape (bez końcowego /)
@@ -117,13 +118,18 @@ void Sync()
          items = ""; n = 0;
       }
    }
-   if(n > 0 && !Post(items, offset)) return;
+   // zawsze wysyłamy (także bez nowych transakcji) — serwer dostaje aktualne equity
+   if(!Post(items, offset)) return;
    GlobalVariableSet(g_key, (double)MathMax((long)last, (long)from + 3600));
 }
 
 bool Post(string items, long offset)
 {
-   string body = StringFormat("{\"gmt_offset\":%I64d,\"deals\":[%s]}", offset, items);
+   string acct = StringFormat("{\"balance\":\"%s\",\"equity\":\"%s\",\"currency\":\"%s\"}",
+                              DoubleToString(AccountInfoDouble(ACCOUNT_BALANCE), 2),
+                              DoubleToString(AccountInfoDouble(ACCOUNT_EQUITY), 2),
+                              JsonEscape(AccountInfoString(ACCOUNT_CURRENCY)));
+   string body = StringFormat("{\"gmt_offset\":%I64d,\"deals\":[%s],\"account\":%s}", offset, items, acct);
    char data[], result[];
    string headers = "Content-Type: application/json\r\nAuthorization: Bearer " + TapeToken + "\r\n";
    string reply_headers;

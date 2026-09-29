@@ -26,7 +26,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import Integer, String, Text, select
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
-from .db import Base, UtcDateTime, store_cash_flows, store_fills
+from .db import Base, ExactDecimal, UtcDateTime, store_cash_flows, store_fills
 from .importers import ibkr
 from .importers.base import CashFlow, Fill
 from .importers.instruments import default_contract_size, normalize_symbol
@@ -145,9 +145,34 @@ class Mt5Deal(BaseModel):
     contract_size: Optional[Decimal] = Field(None, ge=0)          # 0 = EA nie zna symbolu → domyślna
 
 
+class Mt5Account(BaseModel):
+    balance: Decimal
+    equity: Decimal
+    currency: str = Field("USD", max_length=8)
+
+
 class Mt5Payload(BaseModel):
     gmt_offset: int = Field(0, ge=-14 * 3600, le=14 * 3600, description="czas serwera − UTC, w sekundach")
     deals: List[Mt5Deal] = Field(default_factory=list, max_length=5000)
+    account: Optional[Mt5Account] = None          # stan konta w chwili wysyłki (EA ≥ 1.1)
+
+
+class EquityRow(Base):
+    """Ostatni znany stan konta z brokera: equity − balance = wynik otwartych pozycji."""
+
+    __tablename__ = "equity_snapshots"
+
+    book: Mapped[str] = mapped_column(String(64), primary_key=True)     # id połączenia (globalnie unikalne)
+    account: Mapped[str] = mapped_column(String(64), index=True)
+    ts: Mapped[datetime] = mapped_column(UtcDateTime)
+    balance: Mapped[Decimal] = mapped_column(ExactDecimal)
+    equity: Mapped[Decimal] = mapped_column(ExactDecimal)
+    currency: Mapped[str] = mapped_column(String(8), default="USD")
+
+
+def latest_equity(session: Session, account: str, book: str) -> Optional[EquityRow]:
+    row = session.get(EquityRow, book)
+    return row if row is not None and row.account == account else None
 
 
 def mt5_fills(payload: Mt5Payload) -> tuple[List[Fill], List[str], List[CashFlow]]:
@@ -190,7 +215,15 @@ def ingest_mt5(session: Session, conn: Connection, payload: Mt5Payload, now: Opt
     fills, errors, flows = mt5_fills(payload)
     new, dup = store_fills(session, conn.account, "mt5", fills, book=conn.id)   # każde konto osobno
     store_cash_flows(session, conn.account, "mt5", flows, book=conn.id)
-    _finish(conn, now or datetime.now(timezone.utc), new, "; ".join(errors[:3]))
+    now = now or datetime.now(timezone.utc)
+    if payload.account is not None:
+        row = session.get(EquityRow, conn.id)
+        if row is None:
+            row = EquityRow(book=conn.id, account=conn.account)
+            session.add(row)
+        row.ts, row.balance, row.equity = now, payload.account.balance, payload.account.equity
+        row.currency = payload.account.currency
+    _finish(conn, now, new, "; ".join(errors[:3]))
     if errors:
         conn.last_status = "partial"
     return {"new": new, "duplicates": dup, "errors": errors[:50]}

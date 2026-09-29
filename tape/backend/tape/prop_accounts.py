@@ -40,6 +40,7 @@ def status_dict(row: PropAccountRow, st: prop.TodayStatus) -> dict:
             "level": st.level, "balance": f(st.balance), "today_pnl": f(st.today_pnl),
             "daily_limit": f(st.daily_limit), "daily_left": f(st.daily_left),
             "overall_limit": f(st.overall_limit), "overall_left": f(st.overall_left),
+            "floating": f(st.floating) if st.floating is not None else None,
             "rules": {"initial_balance": f(row.initial_balance), "daily_loss_pct": float(row.daily_loss_pct),
                       "max_drawdown_pct": float(row.max_drawdown_pct), "drawdown_type": row.drawdown_type,
                       "profit_target_pct": float(row.profit_target_pct) if row.profit_target_pct is not None else None,

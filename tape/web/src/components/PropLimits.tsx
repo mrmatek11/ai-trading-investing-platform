@@ -42,6 +42,17 @@ function Card({ a }: { a: PropAccountStatus }) {
         <div className="flex-1" />
         <span className="num text-xs text-muted">dziś {money(a.today_pnl)}</span>
       </div>
+      <div className="num -mt-1.5 text-[11px] text-muted">
+        {a.floating != null ? (
+          <>
+            otwarte pozycje <span className={a.floating < 0 ? "text-neg" : "text-pos"}>{money(a.floating)}</span> · equity z MT5
+          </>
+        ) : a.equity_ts ? (
+          <span className="text-warn">brak świeżego equity z MT5 — tylko zamknięte transakcje</span>
+        ) : (
+          "tylko zamknięte transakcje"
+        )}
+      </div>
       <Meter label="Zostało na dziś" left={a.daily_left} limit={a.daily_limit} />
       <Meter label="Zostało do max drawdownu" left={a.overall_left} limit={a.overall_limit} />
     </div>
@@ -59,7 +70,11 @@ export function PropLimits() {
           <Card key={a.id} a={a} />
         ))}
       </div>
-      <p className="text-[11px] text-muted">Na zamkniętych transakcjach — otwarte pozycje z minusem zmniejszają zapas szybciej.</p>
+      {q.data.some((a) => !a.equity_fresh) && (
+        <p className="text-[11px] text-muted">
+          Konta bez equity liczone z zamkniętych transakcji — otwarte pozycje z minusem zmniejszają zapas szybciej. EA Tape Sync 1.10 wysyła equity.
+        </p>
+      )}
     </section>
   );
 }
