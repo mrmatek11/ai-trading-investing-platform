@@ -20,7 +20,7 @@ function TokenBridge({ children }: { children: ReactNode }) {
 function SignInScreen() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-bg p-6">
-      <div className="num flex h-10 w-10 items-center justify-center rounded-md border-[1.5px] border-fg text-lg font-medium">T</div>
+      <div className="num flex h-10 w-10 items-center justify-center rounded-md border-[1.5px] border-fg text-lg font-medium">G</div>
       <SignIn routing="hash" />
     </div>
   );

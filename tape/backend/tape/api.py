@@ -216,7 +216,7 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
     def current_account(request: Request) -> str:
         return request.state.account
 
-    app = FastAPI(title="Tape API", version="0.1.0", dependencies=[Depends(auth)])
+    app = FastAPI(title="GoldTape API", version="0.1.0", dependencies=[Depends(auth)])
 
     def positions_for(account: str, book: Optional[str] = None):
         with Session() as s:

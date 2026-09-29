@@ -158,8 +158,8 @@ export function Shell() {
   return (
     <div className="flex h-full min-h-screen bg-bg text-fg">
       <nav aria-label="Moduły" className="flex w-14 shrink-0 flex-col items-center gap-1 border-r border-line py-3">
-        <div className="num mb-4 flex h-7 w-7 items-center justify-center rounded-md border-[1.5px] border-fg text-[13px] font-medium">
-          T
+        <div title="GoldTape" className="num mb-4 flex h-7 w-7 items-center justify-center rounded-md border-[1.5px] border-accent text-[13px] font-medium text-accent">
+          G
         </div>
         {NAV.map((item) => (
           <Link

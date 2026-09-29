@@ -20,7 +20,7 @@ const LOGIN_ERRORS: Record<string, string> = {
 };
 
 function Logo() {
-  return <div className="num flex h-10 w-10 items-center justify-center rounded-md border-[1.5px] border-fg text-lg font-medium">T</div>;
+  return <div className="num flex h-10 w-10 items-center justify-center rounded-md border-[1.5px] border-fg text-lg font-medium">G</div>;
 }
 
 function DiscordLogin() {
@@ -29,7 +29,7 @@ function DiscordLogin() {
     <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-bg p-6 text-center">
       <Logo />
       <div>
-        <h1 className="text-xl font-semibold tracking-tight">Tape</h1>
+        <h1 className="text-xl font-semibold tracking-tight">GoldTape</h1>
         <p className="mt-1 text-muted">Journal, portfel i terminal dla traderów złota i srebra.</p>
       </div>
       {err && <p role="alert" className="text-warn">{LOGIN_ERRORS[err] ?? "Logowanie nie powiodło się."}</p>}

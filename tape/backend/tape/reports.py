@@ -128,7 +128,7 @@ def weekly_report(session: Session, account: str, now: datetime, app_url: str = 
     from .review import latest as latest_review
     rev = latest_review(session, account)
 
-    text = [f"Tape — tydzień do {now:%d.%m.%Y}", "",
+    text = [f"GoldTape — tydzień do {now:%d.%m.%Y}", "",
             f"Wynik netto: {_m(s.net_pnl)} USD · {s.trades} {trades_word(s.trades)} · win rate {(s.win_rate or 0) * 100:.0f}%",
             f"Najlepsza: {best.symbol} {_m(float(best.net_pnl))} · najgorsza: {worst.symbol} {_m(float(worst.net_pnl))}"]
     body = [_row("Wynik netto", f"{_m(s.net_pnl)} USD", _tone(s.net_pnl)), _row("Transakcje", str(s.trades)),
@@ -154,13 +154,13 @@ def weekly_report(session: Session, account: str, now: datetime, app_url: str = 
         text += ["", "Ważne dane USD:"] + [f"- {e.ts:%a %d.%m %H:%M} UTC {e.title}" for e in upcoming[:8]]
     if rev and rev.payload.get("headline"):
         sections.append(f"<p style='color:#8b8b93;margin-top:18px'>Ostatni przegląd AI: {html.escape(rev.payload['headline'])}</p>")
-    link = f"<p style='margin-top:18px'><a href='{html.escape(app_url)}' style='color:#e8e8ea'>Otwórz Tape</a></p>" if app_url else ""
+    link = f"<p style='margin-top:18px'><a href='{html.escape(app_url)}' style='color:#e8e8ea'>Otwórz GoldTape</a></p>" if app_url else ""
     page = (f"<div style='background:#0b0b0d;color:#e8e8ea;font-family:-apple-system,Segoe UI,sans-serif;padding:24px'>"
             f"<div style='max-width:560px;margin:0 auto'><h2 style='font-size:18px;margin:0 0 12px'>Tydzień do {now:%d.%m.%Y}</h2>"
             f"<table style='width:100%;border-collapse:collapse;font-size:14px'>{''.join(body)}</table>"
             f"{''.join(sections)}{link}<p style='color:#5a5a62;font-size:12px;margin-top:24px'>"
-            f"Liczby z zamkniętych transakcji. Raport możesz wyłączyć w ustawieniach Tape.</p></div></div>")
-    return Mail(to="", subject=f"Tape: tydzień {_m(s.net_pnl)} USD · {s.trades} {trades_word(s.trades)}",
+            f"Liczby z zamkniętych transakcji. Raport możesz wyłączyć w ustawieniach GoldTape.</p></div></div>")
+    return Mail(to="", subject=f"GoldTape: tydzień {_m(s.net_pnl)} USD · {s.trades} {trades_word(s.trades)}",
                 text="\n".join(text), html=page)
 
 
@@ -184,7 +184,7 @@ def prop_alerts(session: Session, account: str, now: datetime) -> List[Mail]:
                 else f"zostało {_m(float(st.daily_left))} z {_m(float(st.daily_limit))} dziennego limitu")
         text = (f"{r.name}: {what}.\nDo max drawdownu: {_m(float(st.overall_left))}.\n"
                 "Rozważ przerwę do jutra — większość oblanych challenge'y to złamana reguła, nie strategia.")
-        out.append(Mail(to="", kind="alert", subject=f"Tape: {r.name} — {what}", text=text,
+        out.append(Mail(to="", kind="alert", subject=f"GoldTape: {r.name} — {what}", text=text,
                         html=f"<p>{html.escape(text).replace(chr(10), '<br>')}</p>"))
     return out
 

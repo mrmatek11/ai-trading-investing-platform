@@ -178,7 +178,7 @@ function AddMt5({ onDone }: { onDone: () => void }) {
             Przeciągnij EA na dowolny wykres, w parametrach wklej token i adres <span className="num text-fg">{origin}</span>.
           </li>
         </ol>
-        <p className="text-xs text-muted">EA tylko czyta historię konta — nie otwiera ani nie zamyka pozycji. Nowe transakcje pojawią się w Tape w ciągu minuty.</p>
+        <p className="text-xs text-muted">EA tylko czyta historię konta — nie otwiera ani nie zamyka pozycji. Nowe transakcje pojawią się w GoldTape w ciągu minuty.</p>
         <div className="flex justify-end">
           <button type="button" onClick={onDone} className="h-9 rounded-md bg-fg px-4 font-medium text-bg">Gotowe</button>
         </div>

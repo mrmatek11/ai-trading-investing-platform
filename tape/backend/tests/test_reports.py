@@ -38,7 +38,7 @@ def test_weekly_report_escapes_user_content(tmp_path):
         s.add(journal.JournalEntry(account="u1", position_key=key, mistakes=["<script>alert(1)</script>"], notes=""))
         s.commit()
         m = reports.weekly_report(s, "u1", MONDAY)
-    assert m.subject == "Tape: tydzień −3 750,00 USD · 3 transakcje"
+    assert m.subject == "GoldTape: tydzień −3 750,00 USD · 3 transakcje"
     assert "<script>" not in m.html and "&lt;script&gt;" in m.html
     assert "FTMO &lt;100k&gt;" in m.html and "Mała próba" in m.text
     with S() as s:
