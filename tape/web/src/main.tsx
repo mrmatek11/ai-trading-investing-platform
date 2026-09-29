@@ -5,6 +5,7 @@ import { createRoot } from "react-dom/client";
 import { Shell } from "./components/Shell";
 import { Dashboard } from "./pages/Dashboard";
 import { ImportPage } from "./pages/Import";
+import { RiskPage } from "./pages/Risk";
 import { Trades } from "./pages/Trades";
 import "./styles.css";
 
@@ -15,6 +16,7 @@ const routeTree = root.addChildren([
   // Globus (three.js) ładowany osobno — journal nie czeka na ~2 MB grafiki 3D.
   createRoute({ getParentRoute: () => root, path: "/globe", component: lazyRouteComponent(() => import("./pages/Globe"), "GlobePage") }),
   createRoute({ getParentRoute: () => root, path: "/import", component: ImportPage }),
+  createRoute({ getParentRoute: () => root, path: "/risk", component: RiskPage }),
 ]);
 
 const router = createRouter({ routeTree });

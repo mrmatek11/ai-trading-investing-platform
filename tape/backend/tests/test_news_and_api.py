@@ -115,3 +115,17 @@ def test_api_events_bias_and_token(tmp_path, monkeypatch):
     bias = client.get("/api/bias", headers=h).json()
     assert set(bias) >= {"XAU", "XAG", "track_record"}
     assert bias["track_record"]["available"] is False
+
+
+def test_api_position_size_and_prop(tmp_path):
+    client = TestClient(create_app(f"sqlite:///{tmp_path / 'tape.db'}"))
+    r = client.post("/api/tools/position-size", json={"balance": 10000, "risk_pct": 1, "entry": 2684.2, "stop": 2669.2})
+    assert r.status_code == 200 and r.json()["lots"] == 0.06
+    assert client.post("/api/tools/position-size", json={"balance": 10000, "risk_pct": 1, "entry": 1, "stop": 1}).status_code == 400
+    files = {"file": ("deals.csv", io.BytesIO(MT5_CSV.encode()), "text/csv")}
+    client.post("/api/imports", files=files)
+    body = client.post("/api/prop/evaluate", json={"initial_balance": 10000, "drawdown_type": "trailing"}).json()
+    assert body["report"]["status"] == "active" and body["report"]["balance"] == 10099.3
+    assert set(body["simulation"]) == {"static_10", "trailing_6", "trailing_5_3"}
+    bad_tz = client.post("/api/prop/evaluate", json={"initial_balance": 10000, "day_tz": "Mars/Base"})
+    assert bad_tz.status_code == 400

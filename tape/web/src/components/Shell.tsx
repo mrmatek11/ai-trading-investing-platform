@@ -28,19 +28,27 @@ const NAV: { to: string; label: string; icon: ReactNode }[] = [
     ),
   },
   {
+    to: "/risk",
+    label: "Ryzyko",
+    icon: <path d="M12 3l8 3v6c0 4.5-3.4 8.2-8 9-4.6-.8-8-4.5-8-9V6z" />,
+  },
+  {
     to: "/import",
     label: "Import",
     icon: <path d="M12 4v11M7 10l5 5 5-5M5 20h14" />,
   },
 ];
 
-// Polecenia w stylu terminala: „GLOBE XAU”, „JRNL”, „IMPORT”, „TRADES”.
+// Polecenia w stylu terminala: „GLOBE XAU”, „JRNL”, „IMPORT”, „TRADES”, „RISK”.
 const COMMANDS: Record<string, string> = {
   GLOBE: "/globe",
   JRNL: "/",
   JOURNAL: "/",
   TRADES: "/trades",
   IMPORT: "/import",
+  RISK: "/risk",
+  CALC: "/risk",
+  PROP: "/risk",
 };
 
 export function Shell() {
@@ -85,7 +93,7 @@ export function Shell() {
       setCmd("");
       navigate({ to: target });
     } else if (cmd.trim()) {
-      setError("Nieznane polecenie. Spróbuj: GLOBE, JRNL, TRADES, IMPORT");
+      setError("Nieznane polecenie. Spróbuj: GLOBE, JRNL, TRADES, RISK, IMPORT");
     }
   };
 
@@ -146,7 +154,7 @@ export function Shell() {
                 setCmd(e.target.value);
                 setError("");
               }}
-              placeholder="Polecenie: GLOBE, JRNL, TRADES, IMPORT"
+              placeholder="Polecenie: GLOBE, JRNL, TRADES, RISK, IMPORT"
               className="num flex-1 bg-transparent text-[13px] text-fg outline-none placeholder:text-muted"
               autoComplete="off"
             />

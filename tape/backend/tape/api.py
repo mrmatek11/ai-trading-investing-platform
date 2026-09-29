@@ -14,16 +14,43 @@ import os
 from datetime import datetime, timezone
 from typing import Optional
 
+from decimal import Decimal
+
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
+from pydantic import BaseModel, Field
 
 from .db import ImportRow, load_fills, make_sessionmaker, store_fills
 from .engine import stats
+from .engine import prop, risk
 from .engine.positions import build_positions
 from .importers import BROKERS, generic, parse_file
 from .news.bias import aggregate, event_to_dict
 from .news.sample import sample_events
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+
+
+class SizeRequest(BaseModel):
+    balance: Decimal = Field(gt=0)
+    risk_pct: Decimal = Field(gt=0, le=100)
+    entry: Decimal = Field(gt=0)
+    stop: Decimal = Field(gt=0)
+    contract_size: Decimal = Field(Decimal(100), gt=0)
+    lot_step: Decimal = Field(Decimal("0.01"), gt=0)
+    min_lot: Decimal = Field(Decimal("0.01"), gt=0)
+    max_lot: Decimal | None = Field(None, gt=0)
+    daily_range: Decimal | None = Field(None, gt=0)
+    daily_loss_limit: Decimal | None = Field(None, gt=0)
+
+
+class PropRequest(BaseModel):
+    initial_balance: Decimal = Field(gt=0)
+    daily_loss_pct: Decimal = Field(Decimal(5), gt=0, le=100)
+    max_drawdown_pct: Decimal = Field(Decimal(10), gt=0, le=100)
+    drawdown_type: str = Field("static", pattern="^(static|trailing)$")
+    profit_target_pct: Decimal | None = Field(Decimal(10), gt=0)
+    day_tz: str = "Europe/Prague"
+    account: str = "default"
 
 
 def create_app(database_url: Optional[str] = None) -> FastAPI:
@@ -99,6 +126,40 @@ def create_app(database_url: Optional[str] = None) -> FastAPI:
             "equity": stats.equity_curve(items),
             "segments": [stats.as_dict(x) for x in stats.segments(items)],
         }
+
+    @app.post("/api/tools/position-size")
+    def size(req: SizeRequest):
+        try:
+            r = risk.position_size(req.balance, req.risk_pct, req.entry, req.stop, req.contract_size,
+                                   req.lot_step, req.min_lot, req.max_lot, req.daily_range, req.daily_loss_limit)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        f = lambda d: float(d) if d is not None else None  # noqa: E731
+        return {"lots": f(r.lots), "risk_budget": f(r.risk_budget), "risk_actual": f(r.risk_actual),
+                "stop_distance": f(r.stop_distance), "value_per_point": f(r.value_per_point),
+                "notional": f(r.notional), "min_lot_risk": f(r.min_lot_risk),
+                "daily_range_loss": f(r.daily_range_loss), "daily_limit_share": f(r.daily_limit_share),
+                "warnings": list(r.warnings)}
+
+    @app.post("/api/prop/evaluate")
+    def prop_evaluate(req: PropRequest):
+        try:
+            rules = prop.PropRules(req.initial_balance, req.daily_loss_pct, req.max_drawdown_pct,
+                                   req.drawdown_type, req.profit_target_pct, req.day_tz, name="Twoje konto")
+        except Exception as exc:  # np. nieznana strefa czasowa
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        items = positions_for(req.account)
+        try:
+            report = prop.evaluate(items, rules)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        sims = prop.simulate(items, req.initial_balance)
+        return {"report": prop.report_to_dict(report),
+                "simulation": {k: {"name": v.rules.name, "status": v.status, "breach": v.breach,
+                                   "breach_day": v.breach_day.isoformat() if v.breach_day else None,
+                                   "passed_day": v.passed_day.isoformat() if v.passed_day else None}
+                               for k, v in sims.items()},
+                "note": "Liczone na saldzie po zamknięciu transakcji; firmy liczą też equity z otwartymi pozycjami."}
 
     @app.get("/api/events")
     def events():

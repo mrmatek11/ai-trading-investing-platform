@@ -90,6 +90,66 @@ export type ImportReport = {
   error_count: number;
 };
 
+export type SizeInput = {
+  balance: number;
+  risk_pct: number;
+  entry: number;
+  stop: number;
+  contract_size: number;
+  daily_range?: number | null;
+  daily_loss_limit?: number | null;
+};
+
+export type SizeResult = {
+  lots: number;
+  risk_budget: number;
+  risk_actual: number;
+  stop_distance: number;
+  value_per_point: number;
+  notional: number;
+  min_lot_risk: number;
+  daily_range_loss: number | null;
+  daily_limit_share: number | null;
+  warnings: string[];
+};
+
+export type PropInput = {
+  initial_balance: number;
+  daily_loss_pct: number;
+  max_drawdown_pct: number;
+  drawdown_type: "static" | "trailing";
+  profit_target_pct: number | null;
+};
+
+export type PropDay = { day: string; end_balance: number; pnl: number; daily_floor: number; overall_floor: number; breach: string | null };
+
+export type PropResponse = {
+  report: {
+    status: "active" | "breached" | "passed";
+    balance: number;
+    breach: "daily" | "max_drawdown" | null;
+    breach_day: string | null;
+    passed_day: string | null;
+    daily_headroom: number | null;
+    overall_headroom: number | null;
+    days: PropDay[];
+  };
+  simulation: Record<string, { name: string; status: string; breach: string | null; breach_day: string | null; passed_day: string | null }>;
+  note: string;
+};
+
+async function post<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => null);
+    const d = detail?.detail;
+    // 422 z FastAPI: lista błędów walidacji pól
+    const msg = typeof d === "string" ? d : Array.isArray(d) ? `Niepoprawne pole: ${d.map((e: { loc?: string[] }) => e.loc?.at(-1)).join(", ")}` : `Błąd ${res.status}`;
+    throw new Error(msg);
+  }
+  return res.json() as Promise<T>;
+}
+
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(path);
   if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
@@ -101,6 +161,8 @@ export const api = {
   positions: () => get<Position[]>("/api/positions"),
   events: () => get<MarketEvent[]>("/api/events"),
   bias: () => get<BiasResponse>("/api/bias"),
+  positionSize: (input: SizeInput) => post<SizeResult>("/api/tools/position-size", input),
+  prop: (input: PropInput) => post<PropResponse>("/api/prop/evaluate", input),
   async importFile(file: File, broker: string, tz: string): Promise<ImportReport> {
     const body = new FormData();
     body.append("file", file);
