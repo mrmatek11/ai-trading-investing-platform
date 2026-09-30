@@ -174,8 +174,9 @@ Full write-up in [docs/BACKTEST_RESULTS.md](docs/BACKTEST_RESULTS.md).
 - **Gold day trading, M15:** parameters chosen on 2012–2016 and evaluated out-of-sample on 2017–2022 against a random-direction
   baseline. **Nothing is significant after costs.** The best candidate — the London opening-range breakout after an NR7 day —
   is implemented in `strategy/gold_orb.py` as **paper trading only**.
-- The 2017–2022 period has now been looked at, so it no longer counts as a blind test. The next hypothesis is written down before
-  seeing data from 2022-03 onward; a strategy only earns real money after passing one untouched forward period.
+- The 2017–2022 period has now been looked at, so it no longer counts as a blind test. The candidate is frozen (code hashes,
+  parameters, risk) in a [freeze card](docs/BACKTEST_RESULTS.md#karta-zamrożenia-zapisana-przed-testem-na-nowych-danych) with a
+  single confirmatory test on data after 2022-03-04; a strategy only earns real money after passing that one untouched period.
 
 ## Quality
 

@@ -73,12 +73,12 @@ Stan: 2026-09-29. Dane: `ejtraderLabs/historical-data` XAUUSD M15, 2012-05 → 2
    Przewaga (+4 bps ≈ 0,7 USD/oz) znika przy koszcie ~1 USD/oz — u brokera ze spreadem 0,5+ USD jej nie ma.
 2. **Kontynuacja Londyn → NY jest istotnie ujemna poza próbą** (t = −2,7). To sugeruje *odwrócenie* ruchu
    Londynu na otwarciu NY — ale ta hipoteza powstała po obejrzeniu wyników, więc wolno ją sprawdzić tylko
-   na nowych danych (2022-03 →). Zapisuję ją tu, zanim zobaczę te dane.
+   na nowych danych (po 2022-03-04 23:45). Zapisuję ją tu, zanim zobaczę te dane.
 3. Filtry „oczywiste” (trend SMA20) pogarszają wynik — typowy objaw dopasowania do szumu.
 
 **Decyzja dla bota:** `strategy/gold_orb.py` realizuje London ORB po NR7 **wyłącznie jako paper trading**
-(plan dnia + alert Discord + dziennik), na tym samym kodzie co backtest. Warunek przejścia na realne pieniądze:
-≥ 100 transakcji paper/live z wynikiem po kosztach w przedziale ufności badania i spread ≤ 0,40 USD/oz.
+(plan dnia + alert Discord + dziennik), na tym samym kodzie co backtest. Warunek przejścia na realne pieniądze
+jest jeden: zdany test z karty zamrożenia poniżej, a do tego spread u brokera ≤ 0,40 USD/oz (koszt przyjęty w badaniu).
 
 ```bash
 python -m research.intraday_lab --csv XAUUSD-m15.csv                  # pełne badanie (~10 min)
@@ -99,16 +99,18 @@ wymaga kolejnego, jeszcze nieoglądanego okresu danych.
 - Ryzyko w paper tradingu: 0,5% salda na transakcję.
 
 **Które dane są zużyte**
-- Całość 2012-05 → 2022-03. Lata 2017–2022 były poza próbą tylko raz: najlepszą z 8 strategii wybrałem,
-  patrząc na nie, więc nie są już ślepym testem.
+- Wszystkie świece od 2012-05-15 08:00 do **2022-03-04 23:45** (czas serwera EET/EEST; ostatnia świeca pliku
+  użytego w badaniu). Lata 2017–2022 były poza próbą tylko raz: najlepszą z 8 strategii wybrałem, patrząc na nie,
+  więc nie są już ślepym testem.
 
 **Test potwierdzający — uruchamiany raz**
-- Dane: XAUUSD M15 od 2022-03-01 (czas serwera EET/EEST), których jeszcze nie oglądałem.
-- H1: London ORB po NR7 ma średni wynik po kosztach > 0 przy co najmniej 100 transakcjach.
-- H2: odwrócony sygnał `london_ny_continuation` (te same parametry wybrane na 2012–2016) ma średni wynik
-  po kosztach > 0.
-- Dwie hipotezy → próg po Bonferronim: t ≥ 1,96 dla każdej (jednostronnie, 2,5%).
+- Dane: XAUUSD M15 **ściśle po 2022-03-04 23:45** czasu serwera (pierwszy dzień handlowy 2022-03-07),
+  historyczne albo z paper tradingu na bieżąco.
+- Hipoteza (jedna): London ORB po NR7 ma średni wynik po kosztach > 0, przy co najmniej 100 transakcjach
+  i t ≥ 1,65 (jednostronnie, 5%).
 - Wynik zapisuję tutaj bez względu na to, jaki wyjdzie, i nie zmieniam po nim parametrów.
+- Odwrócenie ruchu Londyn → NY (wniosek 2) nie jest objęte tą kartą, bo nie ma jeszcze kodu. Żeby je sprawdzić,
+  trzeba najpierw napisać i zamrozić tę strategię (wejście, stop, czas wyjścia), a dopiero potem otworzyć dane.
 - Brak istotności = strategia zostaje w paper tradingu albo jest porzucona, a nie „dostrajana” pod nowe dane.
 
 ## Inne rynki
