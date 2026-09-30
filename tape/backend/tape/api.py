@@ -364,8 +364,11 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
                 "duplicates": dup, "errors": result.errors[:50], "error_count": len(result.errors)}
 
     @app.get("/api/positions")
-    def positions(account: str = Depends(current_account), limit: int = 200, book: Optional[str] = None):
+    def positions(account: str = Depends(current_account), limit: int = 200, book: Optional[str] = None,
+                  symbol: Optional[str] = None):
         items = positions_for(account, book)
+        if symbol:                                    # filtr przed limitem — inaczej starsze transakcje symbolu znikają
+            items = [p for p in items if p.symbol.upper() == symbol.upper()]
         items.sort(key=lambda p: p.closed_at or p.opened_at, reverse=True)
         with Session() as s:
             entries = journal.entries_by_key(s, account)
@@ -1072,10 +1075,8 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
     BOOK = {"type": "string", "description": "id rachunku z list_accounts; pomiń = wszystkie rachunki"}
 
     def _trades(account, a):
-        items = positions(account=account, limit=a.get("limit", 50), book=a.get("book"))
-        if a.get("symbol"):
-            items = [x for x in items if x.get("symbol", "").upper() == a["symbol"].upper()]
-        return {"trades": items}
+        return {"trades": positions(account=account, limit=a.get("limit", 50), book=a.get("book"),
+                                    symbol=a.get("symbol"))}
 
     def _performance(account, a):
         st = get_stats(account=account, book=a.get("book"))

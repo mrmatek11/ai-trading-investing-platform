@@ -86,3 +86,13 @@ def test_protocol_errors(env):
     batch = call(c, t, [rpc("ping", id_=1), {"jsonrpc": "2.0", "method": "notifications/x"}, rpc("ping", id_=2)]).json()
     assert [m["id"] for m in batch] == [1, 2]
     assert c.get("/api/mcp", headers={"Authorization": f"Bearer {t}"}).status_code == 405
+
+
+def test_list_trades_filters_symbol_before_limit(env):
+    c, a, _ = env                                          # 12 transakcji XAUUSD z sierpnia
+    silver = deals_csv(3, start=900, month=6).replace(b"XAUUSD", b"XAGUSD")
+    c.post("/api/imports", headers=hdr("a"), files={"file": ("s.csv", io.BytesIO(silver), "text/csv")})
+    r = call(c, a["token"], rpc("tools/call", {"name": "list_trades", "arguments": {"symbol": "xagusd", "limit": 5}}))
+    trades = r.json()["result"]["structuredContent"]["trades"]
+    assert len(trades) == 3 and {t["symbol"] for t in trades} == {"XAGUSD"}    # starsze niż 5 ostatnich ogółem
+    assert len(c.get("/api/positions?symbol=XAUUSD&limit=100", headers=hdr("a")).json()) == 12
