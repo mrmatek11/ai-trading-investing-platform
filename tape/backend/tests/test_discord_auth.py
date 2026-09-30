@@ -60,7 +60,7 @@ def test_full_login_and_session(tmp_path):
     assert "tape_session=" in r.headers["set-cookie"] and "httponly" in r.headers["set-cookie"].lower()
     me = c.get("/api/auth/me").json()
     assert me == {"account": "discord:80351110224678912", "name": "Nelly", "provider": "discord",
-                  "avatar": "https://cdn.discordapp.com/avatars/80351110224678912/abc.png?size=64"}
+                  "avatar": "https://cdn.discordapp.com/avatars/80351110224678912/abc.png?size=64", "is_admin": False}
     assert c.get("/api/positions").status_code == 200
     body = urllib.parse.parse_qs(fake.calls[0][3].decode())
     assert body["client_secret"] == ["discord-client-secret"]                  # sekret tylko w żądaniu serwer→Discord

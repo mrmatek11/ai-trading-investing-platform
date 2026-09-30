@@ -11,7 +11,7 @@ export const useAccountMenu = () => useContext(AccountMenu);
 const ClerkGate = lazy(() => import("./ClerkGate"));
 
 type AuthConfig = { clerk: boolean; discord: boolean; single_user: boolean };
-type Me = { account: string; name: string | null; avatar: string | null; provider: string };
+type Me = { account: string; name: string | null; avatar: string | null; provider: string; is_admin: boolean };
 
 const LOGIN_ERRORS: Record<string, string> = {
   cancelled: "Logowanie anulowane w Discordzie.",

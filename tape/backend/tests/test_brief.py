@@ -214,3 +214,19 @@ def test_brief_api_subscription_and_link(db, monkeypatch):
     assert c.post("/api/brief/generate").status_code == 200                       # tryb jednego użytkownika = admin
     body = c.get("/api/brief").json()
     assert body["brief"]["day"] and body["config"]["telegram"] and body["subscription"]["discord_linked"]
+
+
+def test_only_admins_can_generate_the_shared_brief(db, monkeypatch):
+    from test_auth import ISSUER, LocalVerifier, token
+
+    _, url = db
+    monkeypatch.setenv("TAPE_ADMIN_SUBS", "boss")
+    verify = LocalVerifier("https://unused/jwks.json", ISSUER, authorized_parties=("https://app.example.com",))
+    c = TestClient(create_app(url, verifier=verify))
+    user, admin = {"Authorization": f"Bearer {token('trader')}"}, {"Authorization": f"Bearer {token('boss')}"}
+    assert c.get("/api/brief", headers=user).json()["config"]["can_generate"] is False
+    assert c.get("/api/auth/me", headers=user).json()["is_admin"] is False
+    assert c.post("/api/brief/generate", headers=user).status_code == 403
+    assert c.get("/api/brief", headers=admin).json()["config"]["can_generate"] is True
+    assert c.get("/api/auth/me", headers=admin).json()["is_admin"] is True
+    assert c.post("/api/brief/generate", headers=admin).status_code == 200

@@ -281,9 +281,11 @@ export function BriefPage() {
           </span>
         )}
         <div className="flex-1" />
-        <button type="button" onClick={() => gen.mutate()} disabled={gen.isPending} className="h-8 rounded-md border border-line px-3 text-xs disabled:opacity-40">
-          {gen.isPending ? "Generuję…" : "Wygeneruj teraz"}
-        </button>
+        {q.data?.config.can_generate && (
+          <button type="button" onClick={() => gen.mutate()} disabled={gen.isPending} className="h-8 rounded-md border border-line px-3 text-xs disabled:opacity-40">
+            {gen.isPending ? "Generuję…" : "Wygeneruj teraz"}
+          </button>
+        )}
       </div>
       {gen.isError && <p role="alert" className="text-xs text-neg">{gen.error.message}</p>}
       {q.isLoading ? (

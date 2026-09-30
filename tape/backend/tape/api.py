@@ -256,7 +256,8 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
     def auth_me(request: Request):
         p = request.state.profile or {}
         return {"account": request.state.account, "name": p.get("name"), "avatar": p.get("avatar"),
-                "provider": p.get("provider") or ("clerk" if verify is not None else "local")}
+                "provider": p.get("provider") or ("clerk" if verify is not None else "local"),
+                "is_admin": bool(request.state.is_admin)}
 
     def _cookie(resp, name, value, max_age, path="/"):
         resp.set_cookie(name, value, max_age=max_age, path=path, httponly=True, samesite="lax",
@@ -976,12 +977,13 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
                 "discord_linked": bool(sub and sub.discord_webhook)}
 
     @app.get("/api/brief")
-    def get_brief(account: str = Depends(current_account)):
+    def get_brief(request: Request, account: str = Depends(current_account)):
         with Session() as s:
             row = daily_brief.latest(s)
             sub = s.get(daily_brief.BriefSubscription, account)
             return {"brief": {**row.payload, "created_at": row.created_at.isoformat(), "model": row.model} if row else None,
-                    "config": brief_config(), "subscription": subscription_dict(sub)}
+                    "config": {**brief_config(), "can_generate": bool(request.state.is_admin)},
+                    "subscription": subscription_dict(sub)}
 
     @app.post("/api/brief/generate")
     def generate_brief(request: Request, account: str = Depends(current_account)):

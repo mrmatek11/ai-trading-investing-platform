@@ -364,7 +364,7 @@ export type Brief = {
 export type BriefSubscription = { enabled: boolean; telegram_linked: boolean; telegram_name: string; discord_linked: boolean };
 export type BriefResponse = {
   brief: Brief | null;
-  config: { telegram: boolean; bot_username: string | null; channel: string | null; discord: boolean; time: string; tz: string };
+  config: { telegram: boolean; bot_username: string | null; channel: string | null; discord: boolean; time: string; tz: string; can_generate: boolean };
   subscription: BriefSubscription;
 };
 export type McpToken = { id: string; name: string; hint: string; created_at: string; last_used_at: string | null };
