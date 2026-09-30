@@ -52,6 +52,10 @@ services:
       TAPE_TELEGRAM_BOT_USERNAME: ${TAPE_TELEGRAM_BOT_USERNAME:-}
       TAPE_TELEGRAM_CHAT_ID: ${TAPE_TELEGRAM_CHAT_ID:-}
       TAPE_TELEGRAM_CHANNEL_URL: ${TAPE_TELEGRAM_CHANNEL_URL:-}
+      # API jest osiągalne tylko przez nginx (bez portu na zewnątrz), więc ostatni wpis X-Forwarded-For
+      # to prawdziwy adres klienta — potrzebny do limitu zapytań na publicznych endpointach
+      TAPE_TRUST_PROXY: "1"
+      TAPE_RATE_LIMIT: ${TAPE_RATE_LIMIT:-1}
     depends_on:
       db:
         condition: service_healthy

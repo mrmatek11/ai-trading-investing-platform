@@ -26,7 +26,7 @@ from . import journal
 from . import ai_keys, econ_calendar, market, prop_accounts, reports, service
 from . import brief as daily_brief
 from . import mcp_server
-from . import discord_auth
+from . import discord_auth, ratelimit
 from . import review as ai_review
 from . import sync as broker_sync
 from .auth import AuthError, Verifier, admin_subs, verifier_from_env
@@ -143,7 +143,7 @@ def default_ai():
 def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Optional[Verifier] = None,
                secret_box: Optional[SecretBox] = None, flex_fetch=None, ai_factory=None,
                discord: Optional["discord_auth.DiscordConfig"] = None, discord_http=None,
-               llm_http=None, notify_http=None) -> FastAPI:
+               llm_http=None, notify_http=None, rate_limiter: Optional["ratelimit.RateLimiter"] = None) -> FastAPI:
     Session = make_sessionmaker(database_url)
     with Session() as s:
         econ_calendar.ensure_seed(s)
@@ -215,6 +215,24 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
         return request.state.account
 
     app = FastAPI(title="GoldTape API", version="0.1.0", dependencies=[Depends(auth)])
+
+    limiter = rate_limiter
+    if limiter is None and os.getenv("TAPE_RATE_LIMIT", "1").strip() not in ("0", "false", "no"):
+        limiter = ratelimit.RateLimiter(ratelimit.DEFAULT_RULES)
+    trust_proxy = os.getenv("TAPE_TRUST_PROXY", "").strip() in ("1", "true", "yes")
+
+    @app.middleware("http")
+    async def rate_limit(request: Request, call_next):
+        """Publiczne endpointy (bez sesji użytkownika) — limit na adres IP, żeby nikt nie zalał bazy i Discorda."""
+        group = ratelimit.GROUPS.get(request.url.path)
+        if limiter is not None and group is not None:
+            ip = ratelimit.client_ip(request.client.host if request.client else None,
+                                     request.headers.get("x-forwarded-for"), trust_proxy)
+            retry = limiter.hit(group, ip)
+            if retry is not None:
+                return JSONResponse({"detail": "Za dużo zapytań — spróbuj za chwilę"}, status_code=429,
+                                    headers={"Retry-After": str(retry)})
+        return await call_next(request)
 
     def positions_for(account: str, book: Optional[str] = None):
         with Session() as s:

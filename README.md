@@ -179,7 +179,7 @@ Full write-up in [docs/BACKTEST_RESULTS.md](docs/BACKTEST_RESULTS.md).
 
 ## Quality
 
-- **145 GoldTape backend tests** (SQLite + PostgreSQL in CI) and **39 bot tests**: position engine, importers, encryption,
+- **152 GoldTape backend tests** (SQLite + PostgreSQL in CI) and **39 bot tests**: position engine, importers, encryption,
   auth/CSRF, account isolation, AI fact validation, Telegram/Discord delivery, MCP protocol, RSS parsing (incl. XML entity attacks).
 - Protections are **mutation-tested**: removing an isolation check, the OAuth `state` check or the number validator makes a test fail.
 - Optimised code paths are checked against brute-force reference implementations.
@@ -188,7 +188,7 @@ Full write-up in [docs/BACKTEST_RESULTS.md](docs/BACKTEST_RESULTS.md).
 ## Roadmap
 
 - [ ] Payments (Paddle) and plans
-- [ ] Rate limiting on public endpoints
+- [x] Rate limiting on public endpoints (MT5 ingest, MCP, Discord login)
 - [ ] More AI providers (OpenAI-compatible endpoints)
 - [ ] Forward (paper) test of the London ORB candidate on data it has never seen
 
