@@ -86,6 +86,31 @@ python -m strategy.gold_orb --csv XAUUSD-m15.csv --paper 250           # replay
 python -m strategy.gold_orb --live --balance 100000 --risk-pct 0.5     # plan na dziś (GC=F z Yahoo)
 ```
 
+### Karta zamrożenia (zapisana przed testem na nowych danych)
+
+Stan: 2026-09-30. Cel: nie dopasowywać strategii do testu. Każda zmiana poniżej to **nowa hipoteza**, która
+wymaga kolejnego, jeszcze nieoglądanego okresu danych.
+
+**Co jest zamrożone**
+- Kod: commit `f6f6ba8`; SHA-256 plików:
+  - `strategy/gold_orb.py` → `67c4a972f0ab40006d4834d0cd8e8eaedfe26cb0ac16fa2489671be5fa6fe051`
+  - `research/intraday_lab.py` → `a4639151a3691960cf5b7e64b18fc0db5c4ab6de8a4382b9b3925b702a18e1ec`
+- Parametry: `range_min=60`, `stop="range"`, `tp_r=None`, `buffer=0.1`, filtr NR7 z poprzedniego dnia, koszt 0,40 USD/oz.
+- Ryzyko w paper tradingu: 0,5% salda na transakcję.
+
+**Które dane są zużyte**
+- Całość 2012-05 → 2022-03. Lata 2017–2022 były poza próbą tylko raz: najlepszą z 8 strategii wybrałem,
+  patrząc na nie, więc nie są już ślepym testem.
+
+**Test potwierdzający — uruchamiany raz**
+- Dane: XAUUSD M15 od 2022-03-01 (czas serwera EET/EEST), których jeszcze nie oglądałem.
+- H1: London ORB po NR7 ma średni wynik po kosztach > 0 przy co najmniej 100 transakcjach.
+- H2: odwrócony sygnał `london_ny_continuation` (te same parametry wybrane na 2012–2016) ma średni wynik
+  po kosztach > 0.
+- Dwie hipotezy → próg po Bonferronim: t ≥ 1,96 dla każdej (jednostronnie, 2,5%).
+- Wynik zapisuję tutaj bez względu na to, jaki wyjdzie, i nie zmieniam po nim parametrów.
+- Brak istotności = strategia zostaje w paper tradingu albo jest porzucona, a nie „dostrajana” pod nowe dane.
+
 ## Inne rynki
 
 Uruchom lokalnie dla aktualnych danych metali (Yahoo Finance):
