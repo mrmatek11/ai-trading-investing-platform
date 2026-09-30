@@ -1,647 +1,214 @@
-# Multi-Asset Signal Bot v4 — NWO + Stoch(7,3,2) + CVD + GLM AI Analyst + Market Scanner
+<div align="center">
 
-> **Real-time trading signal bot** with Neural Weight Oscillator, Stochastic RSI, CVD analysis, AI-powered signal scoring, daily briefings, market scanner, and end-of-day summaries — all delivered to **Discord**.
+# AI Trading & Investing Platform
 
-![Python 3.11](https://img.shields.io/badge/Python-3.11-blue?logo=python)
-![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker)
-![Discord](https://img.shields.io/badge/Discord-Webhooks-5865F2?logo=discord)
-![GLM AI](https://img.shields.io/badge/AI-GLM_4_Flash-9C27B0?logo=openai)
+**GoldTape — the AI trading desk for gold & silver traders — plus the signal bot and the strategy research behind it.**
 
----
+Journal · Portfolio · Prop-firm guard · Morning brief · AI coach · Claude Code integration · Backtesting
 
-## 📋 Table of Contents
+[![CI](https://github.com/mrmatek11/ai-trading-investing-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/mrmatek11/ai-trading-investing-platform/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/python-3.11%2B-3776AB)
+![FastAPI](https://img.shields.io/badge/FastAPI-backend-009688)
+![React](https://img.shields.io/badge/React_19-frontend-61DAFB)
+![MCP](https://img.shields.io/badge/MCP-Claude_Code_ready-C9A86A)
 
-- [Overview](#-overview)
-- [Key Features](#-key-features)
-- [Market Scanner (NEW)](#-market-scanner-kombajn)
-- [Strategy Details](#-strategy-details-nwo--stoch--cvd)
-- [GLM AI Analyst](#-glm-ai-analyst)
-- [Supported Markets](#-supported-markets)
-- [Discord Notifications](#-discord-notifications)
-- [Quick Start](#-quick-start)
-- [Configuration](#-configuration)
-- [CLI Reference](#-cli-reference)
-- [Architecture](#-architecture)
-- [Project Structure](#-project-structure)
+</div>
 
 ---
 
-## 🎯 Overview
+| Part | Where | What it is |
+|---|---|---|
+| **GoldTape** | [`tape/`](tape/) | Web platform for XAU/XAG traders: synced journal, analytics, portfolio, prop-firm limits, morning brief, AI review, MCP server |
+| **Signal bot** | root (`bot.py`, `strategy/`, `analysis/`, …) | Multi-asset signal bot (NWO + Stochastic + CVD) with Discord alerts — [docs/SIGNAL_BOT.md](docs/SIGNAL_BOT.md) |
+| **Backtester & research** | `backtest.py`, [`research/`](research/) | Walk-forward backtester with costs and significance tests; gold swing and intraday studies — [docs/BACKTEST_RESULTS.md](docs/BACKTEST_RESULTS.md) |
+| **Product docs** | [`docs/`](docs/) | [Product spec](docs/PRODUCT_SPEC.md), [research notes](docs/RESEARCH.md), [GoldTape technical docs](tape/README.md) |
 
-Multi-Asset Signal Bot is a Python-based trading signal scanner that continuously monitors cryptocurrency, commodities, forex, and stock index markets. It combines three powerful indicators — **Neural Weight Oscillator (NWO)**, **Stochastic (7,3,2)**, and **CVD (Cumulative Volume Delta)** — to generate high-quality trading signals. Signals are optionally evaluated by a **GLM AI Analyst** (Zhipu AI ChatGLM) and delivered to Discord with rich embeds.
+## GoldTape
 
-The bot features a **Market Scanner** that continuously analyzes the market — volatility spikes, support/resistance levels, trading sessions, and correlation divergences — keeping you informed even when there are no signals.
+Most trading tools are built for every market. GoldTape is built for the people who trade **XAU and XAG** all day: it syncs
+their broker accounts, tells them where their edge actually is, watches their prop-firm limits in real time and briefs them
+every morning on what will move metals today — in the app, on **Telegram** and on **Discord**.
 
-The bot can operate in **ALERT ONLY** mode (default) or **AUTO-TRADE** mode with position tracking, stop-loss/take-profit management, and automatic position closing.
+The AI layer follows one rule: **code computes the facts, AI interprets them.** Every AI statement cites numbered facts
+(`F1`, `F2`, …). If it contains a number that is not in the cited facts, it is dropped before the user sees it.
 
-```
-┌──────────────┐    ┌──────────────┐    ┌──────────────┐    ┌──────────────┐    ┌──────────────┐
-│  Data Fetch  │───▶│  NWO+Stoch   │───▶│  GLM AI      │───▶│  Score/Filter│───▶│   Discord    │
-│  Binance/YF  │    │  + CVD Det.  │    │  Analyst     │    │  + Cooldown  │    │  Webhook     │
-└──────────────┘    └──────────────┘    └──────────────┘    └──────────────┘    └──────────────┘
-```
+### 📒 Journal that syncs itself
+- **MetaTrader 5** — a small Expert Advisor (`TapeSync.mq5`) pushes deals and live equity every tick; only a hash of its token is stored.
+- **Interactive Brokers** — Flex Web Service, synced hourly; credentials encrypted with AES-256-GCM envelope encryption and key rotation.
+- **File import** — XTB, cTrader, MT5, IBKR Flex XML, or *any* CSV/XLSX: column mapping by heuristics or AI, with preview and confirmation.
+- FIFO position engine on `Decimal` (scale-ins, partial closes, reversals), R-multiples from the initial stop, multiple accounts kept apart.
+- Playbooks with rule checklists, a taxonomy of mistakes and the **cost of each mistake** in dollars.
 
----
+### 📊 Analyst dashboard
+- Expectancy, payoff, profit factor, drawdown depth and duration, streaks, Sharpe/Sortino (daily), R distribution, rolling expectancy.
+- P&L calendar, hour-of-day and weekday breakdowns, **"trades within ±30 min of US data"** segment.
+- Every segment is tested against the rest (t-stat): small samples are labelled as hypotheses, not conclusions.
 
-## ✨ Key Features
+### 🛡️ Prop-firm guard
+- Daily loss and max drawdown (static / trailing) evaluated **for today** in the firm's timezone, including floating P&L from MT5.
+- Warning/danger bars on the dashboard and e-mail alerts at ≤ 25 % headroom — at most once per account per day.
 
-### Core Trading Engine
-- **Neural Weight Oscillator (NWO)** — Custom indicator inspired by Zeiierman's PineScript oscillator, combining price momentum, volume, and volatility into a single neural-weighted signal
-- **Stochastic Oscillator (7,3,2)** — %K/%D crossover detection with oversold (<20) / overbought (>80) zones
-- **CVD (Cumulative Volume Delta)** — Volume flow analysis confirming buying/selling pressure
-- **Multi-Timeframe Confluence** — Scans multiple timeframes (5m, 15m, 1h, 4h, 1d) and checks for signal alignment
-- **Trend Filter** — EMA-based trend detection (200 EMA) with 3 modes: `alert`, `block`, or `off`
+### 💼 Portfolio
+- Gold/silver exposure in ounces and USD, open lots marked to spot, deposits and withdrawals from brokers or manual entries.
+- Monthly returns (Modified Dietz) chained into a time-weighted return.
 
-### AI-Powered Analysis (GLM AI Analyst)
-- **Signal Scorer** — Every signal is scored 1-10 by AI with TAKE/WATCH/SKIP recommendation
-- **Daily Market Briefing** — Morning report with market bias, key pairs, risk events, and watchlist
-- **End-of-Day (EOD) Summary** — Evening recap with lessons learned, best/worst signals, and next-day outlook
-- **Regime Detector** — Identifies market regime (trending/ranging/volatile/quiet) per symbol
-- **Multi-TF Confluence Check** — AI validates signals against higher timeframe context
+### ☀️ Morning brief — "what decides today"
+Every trading day at 07:30 (configurable) GoldTape builds a brief from the economic calendar, gold/silver prices and the
+last 18 hours of headlines (RSS + GDELT). The AI then writes:
+- **What decides the day** — the one release or speech that sets the direction, and why;
+- **Scenarios** for every release: *above forecast → …*, *below forecast → …* (dollar, real yields, Fed expectations);
+- **A lean for XAU and XAG** (bullish / neutral / bearish) with its reasoning and the facts it is based on.
 
-### Multi-Asset Support
-- **Crypto** — BTC, ETH, SOL, BNB, XRP, ADA, DOGE, AVAX, DOT, LINK (via Binance/CCXT)
-- **Commodities** — Gold (XAU/USD), Silver (XAG/USD) (via YFinance)
-- **Forex** — EUR/USD, GBP/USD, USD/JPY, USD/PLN (via YFinance)
-- **Indices** — S&P 500, DAX, Nikkei 225, WIG (Polish stock index) (via YFinance)
+Delivered in the app, to a public **Telegram channel**, to each user's private Telegram chat (one-click link, `/brief`, `/stop`)
+and to **Discord** webhooks. No buy/sell calls — it explains what is at stake and through which mechanism.
 
-### Notifications & Alerts
-- **Discord Rich Embeds** — Color-coded signal cards with all indicator values
-- **Role Mentions** — `@role` pings for LONG/SHORT signals (configurable per direction)
-- **Quiet Hours** — Suppress notifications during specified hours (e.g., 23:00–07:00 UTC)
-- **Error Alerts** — Automatic error notifications (first 3 errors)
-- **Status Updates** — Periodic bot health/indicator status messages
+### 🤖 AI — bring your own model
+- Each user connects their own **Claude** or **DeepSeek** API key. Keys are verified without spending tokens, encrypted at rest,
+  and shown only as the last four characters.
+- **AI journal review** — strengths, leaks and up to three concrete actions, all grounded in the user's own statistics.
+- **News pipeline** — headlines clustered into events, classified by channel (safe haven, real yields, USD, central-bank demand…),
+  quotes validated against the source; bias snapshots are logged append-only and scored against later prices.
 
-### Position Tracking
-- **SQLite Database** — Persistent position storage with PnL tracking
-- **Auto SL/TP** — ATR-based stop-loss and take-profit calculation
-- **Position Timeout** — Auto-close positions after configurable hours
-- **Max Open Positions** — Limit concurrent open positions
-- **Auto-Trade Mode** — Optionally auto-open positions on confirmed signals
-- **Win Rate Stats** — Track win rate, total PnL, and trade history
-
-### News Sentiment (Optional)
-- **CryptoPanic** — Crypto news aggregator sentiment
-- **Finnhub** — Traditional finance news sentiment
-- **NewsAPI** — General news sentiment analysis
-- Signals filtered/boosted by current news sentiment
-
----
-
-## 🔍 Market Scanner (KOMBAJN)
-
-The Market Scanner runs continuously alongside signal detection, keeping you informed even when there are no trading signals. It's purely algorithmic — **zero additional API costs**.
-
-### Features
-
-| Feature | Frequency | Description |
-|---------|-----------|-------------|
-| **Market Pulse** | Every 1h | Quick market summary: top movers, fear/greed estimate, regime counts |
-| **Volatility Scanner** | Every cycle | Detects unusual volatility spikes (current vol > 2x average) |
-| **S/R Monitor** | Every 5th cycle | Tracks key support/resistance levels, alerts on approach/breakout |
-| **Session Reporter** | Every cycle | Reports Asian, European, and US session open/close events |
-| **Correlation Alert** | Every 10th cycle | Detects correlation divergences between correlated pairs |
-
-### How It Works
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    MARKET SCANNER (KOMBAJN)                      │
-│                                                                   │
-│  1. Market Pulse (1h)    ──── Top movers, Fear/Greed, Regimes   │
-│  2. Volatility Scanner   ──── Unusual vol spikes (2x threshold)  │
-│  3. S/R Monitor          ──── Key levels approach/breakout        │
-│  4. Session Reporter     ──── Asian/EU/US open/close alerts      │
-│  5. Correlation Alert    ──── BTC vs ETH, Gold vs Silver, etc.   │
-│                                                                   │
-│  All alerts → Discord embeds (color-coded, zero AI cost)         │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### Correlated Pairs Monitored
-- BTC/USDT vs ETH/USDT
-- XAU/USD vs XAG/USD (Gold vs Silver)
-- SP500 vs DAX (Global indices)
-- BTC/USDT vs XAU/USD (Risk-on / Risk-off)
-
-### CLI Flags
+### 🔌 Claude Code & Claude Desktop (MCP)
+GoldTape is an **MCP server**. Create a personal token in *Settings* and plug your journal into Claude:
 
 ```bash
-python bot.py --no-scanner          # Disable Market Scanner entirely
-python bot.py --no-scanner-pulse    # Disable Market Pulse
-python bot.py --no-scanner-vol      # Disable Volatility Scanner
-python bot.py --no-scanner-sr       # Disable S/R Monitor
-python bot.py --no-scanner-sessions # Disable Session Reporter
-python bot.py --no-scanner-corr     # Disable Correlation Alert
-python bot.py --scanner-pulse 1800  # Custom pulse interval (seconds)
+claude mcp add --transport http goldtape https://your-goldtape/api/mcp \
+  --header "Authorization: Bearer tpk_…"
 ```
 
----
+Then ask Claude things like *"which of my setups lose money on CPI days?"* — on your own Claude subscription.
+Nine read-only tools: performance, trades, journal facts, portfolio, prop status, calendar, quotes, daily brief, accounts.
 
-## 🧠 Strategy Details: NWO + Stoch + CVD
+### 🌍 Market terminal
+Live XAU/XAG ticker with quote age, USD macro calendar, a 3D event globe and a keyboard command bar (`BRIEF`, `PORT`, `RISK`, `SYNC`, …).
 
-The bot uses a layered strategy approach:
+### Architecture
 
-### Layer 1: Neural Weight Oscillator (NWO)
-```
-Oscillator = Weighted combination of:
-  ├── Price Momentum (close vs SMA baseline)
-  ├── Volume Confirmation (volume vs SMA)
-  └── Volatility (ATR-based normalization)
-
-Histogram = Oscillator - SMA(Oscillator, signal_period)
-Signal Line = SMA(Oscillator, signal_period)
-```
-
-### Layer 2: Stochastic (7,3,2)
-```
-%K Raw = 100 × (Close - Lowest Low) / (Highest High - Lowest Low)  [7 bars]
-%K Smooth = SMA(%K, 3)
-%D = SMA(%K Smooth, 2)
-
-LONG:  %K crosses above %D in oversold zone (<20)
-SHORT: %K crosses below %D in overbought zone (>80)
-```
-
-### Layer 3: CVD (Cumulative Volume Delta)
-```
-CVD = Running sum of signed volume:
-  ┌─ Positive volume (close > open) → buying pressure
-  └─ Negative volume (close < open) → selling pressure
-
-CVD SMA = SMA(CVD, 20)
-Bullish: CVD > CVD SMA
-Bearish: CVD < CVD SMA
+```mermaid
+flowchart LR
+  subgraph Brokers
+    MT5[MT5 EA] -->|push| API
+    IBKR[IBKR Flex] -->|hourly| SYNC[sync worker]
+    FILES[CSV / XLSX / XML] --> API
+  end
+  subgraph Market data
+    PRICES[TwelveData / OANDA / gold-api] --> PW[prices worker]
+    RSS[RSS feeds] --> NEWS[news pipeline]
+    GDELT[GDELT] --> NEWS
+    CAL[Economic calendar] --> CW[calendar worker]
+  end
+  API[FastAPI] --- DB[(PostgreSQL)]
+  SYNC --- DB
+  PW --- DB
+  NEWS --- DB
+  CW --- DB
+  BRIEF[brief worker] --- DB
+  BRIEF --> TG[Telegram]
+  BRIEF --> DC[Discord]
+  REP[reports worker] --> MAIL[E-mail]
+  API --> WEB[React app]
+  API --> MCP[Claude Code / Desktop via MCP]
+  API -. user's key .-> LLM[Claude / DeepSeek]
+  BRIEF -. server key .-> LLM
 ```
 
-### Signal Tiers (checked in this order — first match wins)
-| Tier | Conditions (LONG; SHORT mirrored) | Confidence |
-|------|-----------------------------------|------------|
-| **CONFLUENCE** | Stoch K×D cross up with K<30 + NWO histogram > 0 + CVD z-score > 0.5 (0.3 on TradFi) | HIGH |
-| **STOCH STRICT+NWO** | Stoch K×D cross up with K<20 + NWO histogram > 0 | HIGH |
-| **STOCH+NWO** | Stoch K×D cross up with K<30 + NWO histogram > 0 | MEDIUM |
-| **STOCH-ONLY** | K enters oversold zone (no NWO/CVD) — **off by default**, enable with `--stoch-only` | LOW |
+| Layer | Tech |
+|---|---|
+| Backend | Python 3.11+, FastAPI, SQLAlchemy 2, Pydantic v2, Alembic (auto-migrations with a Postgres advisory lock) |
+| Frontend | React 19, Vite, TanStack Router & Query, Tailwind v4, Lightweight Charts, globe.gl |
+| AI | Anthropic structured outputs with prompt caching and server-side fallback · DeepSeek JSON mode · MCP (Streamable HTTP) |
+| Auth | Sign in with Discord (OAuth2 + HttpOnly session + CSRF origin check) or any OIDC/Clerk JWT |
+| Security | AES-256-GCM envelope encryption for secrets, hashed push/MCP tokens, `defusedxml` for all XML, per-account isolation tests |
+| Ops | Docker Compose: `db`, `api`, `web` (nginx + gzip), `sync`, `reports`, `brief` + optional `prices`, `calendar`, `news` |
 
-Trend = EMA20 vs EMA100. By default (`--trend-filter block`) counter-trend signals are not sent.
-
----
-
-## 🤖 GLM AI Analyst
-
-The bot integrates with **Zhipu AI ChatGLM** (glm-4-flash / glm-4 / glm-4-plus) to provide AI-powered market analysis. This is one of the most powerful features of the bot.
-
-### 1. Signal Scorer (Real-time)
-Every detected signal is sent to the AI for evaluation before being posted to Discord:
-
-- **Score**: 1–10 (quality rating)
-- **Recommendation**: `TAKE`, `WATCH`, or `SKIP`
-- **Analysis**: Short textual reasoning
-- **Key Factors**: List of supporting factors
-- **Risks**: List of risk factors
-- **Filter**: Signals scored ≤2 with SKIP recommendation are **automatically filtered out**
-
-### 2. Daily Market Briefing 🌅
-**When**: Once per day, configurable time (default: morning)
-**Content**:
-- Overall market bias (bullish 🟢 / bearish 🔴 / neutral ⚪ / mixed 🟡)
-- Key pairs to watch with reasoning
-- Risk events and warnings
-- AI-curated watchlist
-- Market summary narrative
-
-### 3. End-of-Day (EOD) Summary 🌙
-**When**: Once per day, configurable time (default: evening)
-**Content**:
-- Total signals generated today
-- Signals taken vs watched vs skipped
-- Best signal of the day
-- Worst signal of the day
-- **Lessons learned** by AI
-- **Tomorrow's outlook** — AI prediction for next session
-- Daily summary narrative
-
-### 4. Regime Detector
-Identifies the current market regime for each symbol:
-- 📈 **Trending** — Clear directional movement
-- ↔️ **Ranging** — Sideways/consolidation
-- ⚡ **Volatile** — High volatility environment
-- 😴 **Quiet** — Low activity
-
-### 5. Multi-Timeframe Confluence
-When a signal is detected on a lower timeframe (e.g., 5m), the AI checks higher timeframes (15m, 1h, 4h) for confluence:
-- All timeframes aligned → **Strong signal**
-- Mixed signals → **Reduced confidence**
-- Counter to higher TF → **Flagged as risky**
-
----
-
-## 📊 Supported Markets
-
-| Asset Class | Symbols | Data Source | Timeframes |
-|-------------|---------|-------------|------------|
-| **Crypto** | BTC/USDT, ETH/USDT, SOL/USDT, BNB/USDT, XRP/USDT, ADA/USDT, DOGE/USDT, AVAX/USDT, DOT/USDT, LINK/USDT | Binance (CCXT) | 5m, 15m, 1h, 4h, 1d |
-| **Commodities** | XAU/USD (Gold), XAG/USD (Silver) | YFinance | 1h, 4h, 1d |
-| **Forex** | EUR/USD, GBP/USD, USD/JPY, USD/PLN | YFinance | 1h, 4h, 1d |
-| **Indices** | SP500, DAX, NIKKEI, WIG | YFinance | 1h, 4h, 1d |
-
-> Custom symbols can be added via CLI `--symbols` or config.
-
----
-
-## 📬 Discord Notifications
-
-### Signal Alert Example
-```
-🟢 LONG SIGNAL — BTC/USDT (15m)
-━━━━━━━━━━━━━━━━━━━━━━━━
-💰 Price: $67,432.50
-📊 Stoch K: 18.5 | D: 15.2 (Oversold crossover)
-📈 NWO Osc: 2.34 | Histogram: +1.12
-📉 CVD: +0.85 (Bullish)
-🏷️ Trend: BULLISH (above EMA200)
-📏 SL: $66,800 | TP: $68,500 (ATR-based)
-🎯 Confidence: HIGH
-━━━━━━━━━━━━━━━━━━━━━━━━
-🧠 GLM AI Score: 8/10 — TAKE
-   Key: Strong oversold bounce + volume confirmation
-   Risk: Resistance at $68,000
-```
-
-### Notification Types
-| Type | Color | Description |
-|------|-------|-------------|
-| 🟢 **LONG Signal** | Green | Buy signal with full indicator data |
-| 🔴 **SHORT Signal** | Red | Sell signal with full indicator data |
-| 🧠 **Daily Briefing** | Purple | Morning AI market analysis |
-| 🧠 **EOD Summary** | Indigo | Evening AI daily recap |
-| 🏆 **Position WIN** | Green | Position closed in profit |
-| 💔 **Position LOSS** | Red | Position closed at loss |
-| | 🟠 **Volatility Alert** | Orange | Unusual volatility detected |
-| | 🔵 **Market Pulse** | Cyan | Hourly market summary |
-| | 🟣 **S/R Alert** | Pink | Support/resistance approach/breakout |
-| | 🟢 **Session Open** | Green | Trading session opening |
-| | 🔴 **Session Close** | Red | Trading session closing |
-| | 🟣 **Correlation Alert** | Purple | Correlation divergence detected |
-| ℹ️ **Status** | Blue | Periodic bot health update |
-| ⚠️ **Error** | Orange | Bot error notification |
-| 🚀 **Startup** | Green | Bot startup with config info |
-
----
-
-## 🚀 Quick Start
-
-### Option 1: Docker (Recommended)
+### Quick start
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/YOUR_USERNAME/crypto-signal-bot-v4-glm.git
-cd crypto-signal-bot-v4-glm
-
-# 2. Create config
-cp .env.example .env
-
-# 3. Edit .env with your keys
-nano .env
-
-# 4. Start the bot
-docker compose up -d
-
-# 5. View logs
-docker compose logs -f
+cd tape
+cp .env.example .env            # everything is optional — the app runs in single-user mode without any keys
+docker compose up --build       # → http://localhost:8080
 ```
 
-### Option 2: Manual Installation
+Local development:
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/YOUR_USERNAME/crypto-signal-bot-v4-glm.git
-cd crypto-signal-bot-v4-glm
-
-# 2. Create virtual environment
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# venv\Scripts\activate   # Windows
-
-# 3. Install dependencies
-pip install -r requirements.txt
-
-# 4. Optional: Install AI/news dependencies
-pip install pyjwt      # Required for GLM AI Analyst
-pip install websocket-client  # Optional: for enhanced data
-
-# 5. Test run (no Discord, single scan)
-python bot.py --test --scan
-
-# 6. Run with Discord
-python bot.py --webhook https://discord.com/api/webhooks/.../...
+cd tape/backend && pip install -e ".[dev]" && uvicorn tape.api:create_app --factory --reload
+cd tape/web && npm install && npm run dev   # → http://localhost:5173
 ```
 
----
+Useful switches in `tape/.env` (full list in [`tape/README.md`](tape/README.md)):
 
-## ⚙️ Configuration
+| Feature | Variables |
+|---|---|
+| Sign in with Discord | `TAPE_DISCORD_CLIENT_ID`, `TAPE_DISCORD_CLIENT_SECRET`, `TAPE_SESSION_SECRET`, `TAPE_APP_URL` |
+| Store users' AI keys & broker tokens | `TAPE_SECRET_KEYS` |
+| Server AI (brief, news) | `ANTHROPIC_API_KEY` or `DEEPSEEK_API_KEY` |
+| Telegram brief | `TAPE_TELEGRAM_BOT_TOKEN`, `TAPE_TELEGRAM_BOT_USERNAME`, optional `TAPE_TELEGRAM_CHAT_ID` |
+| Live prices | `TAPE_PRICE_PROVIDER` = `twelvedata` / `oanda` / `goldapi` |
+| E-mail reports | `TAPE_SMTP_*`, `TAPE_MAIL_FROM` |
 
-### Environment Variables (.env)
+### Performance
+
+Measured on a journal with 10,000 positions (20,000 fills): dashboard statistics load in **0.8 s** (from 14 s before the
+quadratic paths were removed), the AI review inputs in 0.55 s, and nginx gzip cuts the statistics payload from 1.1 MB to 176 kB.
+
+## Signal bot and backtester
+
+The original multi-asset signal bot (Neural Weight Oscillator + Stochastic + CVD, AI analyst, market scanner, Discord alerts)
+lives at the repository root — see [docs/SIGNAL_BOT.md](docs/SIGNAL_BOT.md).
+
+`backtest.py` runs the live strategy function over history with the same data window, enters at the next open, charges fees and
+slippage, and reports the t-stat of average R plus an anchored walk-forward in which parameters are chosen only on past data.
 
 ```bash
-# ═══ DISCORD (REQUIRED) ═══
-DISCORD_WEBHOOK=https://discord.com/api/webhooks/XXXXXXXXXX/XXXXXXXXXXXXXXXXXXXX
-
-# ═══ GLM AI ANALYST (OPTIONAL) ═══
-# Get API key at: https://open.bigmodel.cn
-# Format: <id>.<secret>
-GLM_API_KEY=
-
-# ═══ NEWS SENTIMENT (OPTIONAL) ═══
-# Finnhub (free): https://finnhub.io/
-FINNHUB_KEY=
-# NewsAPI (free): https://newsapi.org/
-NEWSAPI_KEY=
-# CryptoPanic (optional): https://cryptopanic.com/
-CRYPTOPANIC_KEY=
-```
-
-### Configuration Presets
-
-| Preset | Description | Stoch Thresholds | Interval |
-|--------|-------------|-------------------|----------|
-| `default` | Balanced signals | 20/80 | 60s |
-| `aggressive` | More signals, lower bar | 25/75 | 30s |
-| `conservative` | Fewer, higher quality | 15/85 | 120s |
-| `scalping` | Fast, short-term | 20/80 | 15s |
-| `multi_asset` | All asset classes | 20/80 | 90s |
-
-```bash
-# Use a preset
-python bot.py --config aggressive --webhook URL
-```
-
----
-
-## 🖥️ CLI Reference
-
-### Basic Usage
-
-```bash
-# Test mode (no Discord, single scan)
-python bot.py --test --scan
-
-# Run live with Discord
-python bot.py --webhook https://discord.com/api/webhooks/...
-
-# Use configuration preset
-python bot.py --config aggressive --webhook URL
-
-# Custom symbols and timeframes
-python bot.py --symbols BTC/USDT,ETH/USDT,SOL/USDT --timeframes 5m,15m,1h --webhook URL
-```
-
-### Multi-Asset
-
-```bash
-# Monitor all markets (crypto + stocks/commodities/forex/indices)
-python bot.py --market both --webhook URL
-
-# Stocks only (YFinance)
-python bot.py --market stocks --webhook URL
-
-# Custom multi-asset watchlist
-python bot.py --market both --symbols BTC/USDT,XAU/USD,EUR/USD,SP500,WIG,DAX,NIKKEI --webhook URL
-```
-
-### GLM AI Analyst
-
-```bash
-# Enable GLM AI Analyst
-python bot.py --glm-key YOUR_API_KEY --webhook URL
-
-# Choose model (flash = fast/cheap, plus = best quality)
-python bot.py --glm-key KEY --glm-model glm-4-flash --webhook URL
-python bot.py --glm-key KEY --glm-model glm-4-plus --webhook URL
-
-# Response language (pl or en)
-python bot.py --glm-key KEY --glm-lang pl --webhook URL
-
-# Disable GLM (use only technical signals)
-python bot.py --no-glm --webhook URL
-```
-
-### Advanced Options
-
-```bash
-# Strategy selection
-python bot.py --strategy nwo_stoch_cvd --webhook URL     # Full NWO + Stoch + CVD (default)
-python bot.py --strategy stoch_7_3_2 --webhook URL       # Stochastic only
-
-# Trend filter modes
-python bot.py --trend-filter block --webhook URL   # Block counter-trend signals entirely (default)
-python bot.py --trend-filter alert --webhook URL   # Send counter-trend signals with a warning
-python bot.py --trend-filter off --webhook URL     # No trend filtering
-
-# Position tracking & auto-trade
-python bot.py --auto-trade --position-size 100 --webhook URL
-python bot.py --no-positions --webhook URL         # Disable position tracking
-
-# Sentiment filter
-python bot.py --sentiment --cryptopanic-key KEY --finnhub-key KEY --webhook URL
-
-# Custom Stochastic thresholds
-python bot.py --oversold 15 --overbought 85 --webhook URL
-
-# Interval and exchange
-python bot.py --interval 30 --exchange binance --webhook URL
-
-# Discord role mentions
-python bot.py --role-id 123456789 --webhook URL
-
-# Logging
-python bot.py --log DEBUG --webhook URL
-```
-
-### All CLI Flags
-
-| Flag | Description | Default |
-|------|-------------|---------|
-| `--webhook`, `-w` | Discord Webhook URL | — |
-| `--test`, `-t` | Test mode (no Discord) | `false` |
-| `--scan` | Single scan (no loop) | `false` |
-| `--config`, `-c` | Config preset | `default` |
-| `--symbols` | Comma-separated symbol list | 10 crypto pairs |
-| `--timeframes`, `-tf` | Comma-separated TFs | `5m,15m,1h` |
-| `--oversold` | Stochastic oversold threshold | `20` |
-| `--overbought` | Stochastic overbought threshold | `80` |
-| `--no-crossover` | Relax K/D crossover requirement | `false` |
-| `--interval` | Scan interval in seconds | `60` |
-| `--exchange` | CCXT exchange name | `binance` |
-| `--role-id` | Discord role ID for mentions | — |
-| `--strategy` | Strategy: `nwo_stoch_cvd` or `stoch_7_3_2` | `nwo_stoch_cvd` |
-| `--sentiment` | Enable news sentiment filter | `false` |
-| `--no-sentiment` | Disable sentiment | `false` |
-| `--market` | Market: `crypto`, `stocks`, `both` | `crypto` |
-| `--trend-filter` | Trend mode: `alert`, `block`, `off` | `block` |
-| `--stoch-only` | Enable the weakest STOCH-ONLY tier | `false` |
-| `--position-size` | Default position size (USD) | `100` |
-| `--no-positions` | Disable position tracking | `false` |
-| `--auto-trade` | Enable auto position opening | `false` |
-| `--glm-key` | GLM API key (Zhipu AI) | — |
-| `--glm-model` | GLM model: `glm-4-flash`, `glm-4`, `glm-4-plus` | `glm-4-flash` |
-| `--no-glm` | Disable GLM AI Analyst | `false` |
-| `--glm-lang` | GLM language: `pl`, `en` | `pl` |
-| `--no-scanner` | Disable Market Scanner KOMBAJN | `false` |
-| `--scanner-pulse` | Market Pulse interval (seconds) | `3600` |
-| `--no-scanner-pulse` | Disable Market Pulse | `false` |
-| `--no-scanner-vol` | Disable Volatility Scanner | `false` |
-| `--no-scanner-sr` | Disable S/R Monitor | `false` |
-| `--no-scanner-sessions` | Disable Session Reporter | `false` |
-| `--no-scanner-corr` | Disable Correlation Alert | `false` |
-| `--log` | Log level: `DEBUG`, `INFO`, `WARNING`, `ERROR` | `INFO` |
-
----
-
-## 🏗️ Architecture
-
-```
-                    ┌─────────────────────────────────────────┐
-                    │            bot.py (Main Loop)            │
-                    │  StochSignalBot                         │
-                    │  ┌─────────┐  ┌──────────┐  ┌────────┐ │
-                    │  │ Scanner │─▶│ GLM AI   │─▶│Discord │ │
-                    │  │  Loop   │  │ Analyst  │  │Notifier│ │
-                    │  └────┬────┘  └──────────┘  └────────┘ │
-                    │       │                                  │
-                    │  ┌────┴──────────┐                       │
-                    │  │Market Scanner │──▶ Discord embeds     │
-                    │  │               │   (Pulse, Vol, S/R,  │
-                    │  └──────────────┘    Sessions, Corr)    │
-                    └───────┼─────────────────────────────────┘
-                            │
-              ┌─────────────┼─────────────┐
-              ▼             ▼             ▼
-    ┌─────────────┐ ┌─────────────┐ ┌──────────────┐
-    │data_fetcher │ │data_fetcher │ │news_sentiment │
-    │  (Binance)  │ │ _yfinance   │ │  (optional)  │
-    │   CCXT      │ │  YFinance   │ │ CryptoPanic   │
-    └──────┬──────┘ └─────────────┘ │ Finnhub       │
-           │                        │ NewsAPI       │
-           ▼                        └──────────────┘
-    ┌──────────────┐
-    │signal_detector│──── Stochastic (7,3,2) + RSI + ATR
-    │custom_strategy│──── NWO + CVD + Trend Filter
-    └──────────────┘
-           │
-           ▼
-    ┌──────────────┐     ┌──────────────┐
-    │glm_analyst   │     │position_     │
-    │ Signal Scorer│     │ tracker      │
-    │ Daily Brief  │     │ SQLite DB    │
-    │ EOD Summary  │     │ SL/TP Mgmt   │
-    │ Regime Detect│     │ PnL Tracking │
-    └──────────────┘     └──────────────┘
-```
-
----
-
-## 📁 Project Structure
-
-```
-crypto-signal-bot-v4-glm/
-├── bot.py                       # Main bot loop & CLI entry point
-├── config.py                    # Configuration dataclass & presets
-├── signal_detector.py           # Stochastic signal detection engine
-├── custom_strategy.py           # NWO + Stoch + CVD combined strategy
-├── neural_weight_oscillator.py  # NWO indicator implementation
-├── glm_analyst.py               # GLM AI Analyst (scorer, briefing, EOD, regime)
-├── market_scanner.py            # Market Scanner KOMBAJN (pulse, vol, S/R, sessions, corr)
-├── data_fetcher.py              # Crypto data (Binance/CCXT)
-├── data_fetcher_yfinance.py     # Multi-asset data (YFinance)
-├── discord_notifier.py          # Discord webhook notifications
-├── news_sentiment.py            # News sentiment filter (CryptoPanic, Finnhub, NewsAPI)
-├── position_tracker.py          # Position tracking with SQLite
-├── requirements.txt             # Python dependencies
-├── Dockerfile                   # Docker image (Python 3.11-slim)
-├── docker-compose.yml           # Docker Compose with volume persistence
-├── entrypoint.sh                # Docker entrypoint script
-├── start.sh                     # Quick-start shell script
-├── .env.example                 # Example environment configuration
-└── README.md                    # This file
-```
-
----
-
-## 📝 Requirements
-
-### Core (required)
-- Python 3.11+
-- ccxt >= 4.0.0
-- pandas >= 2.0.0
-- numpy >= 1.24.0
-- requests >= 2.31.0
-- yfinance >= 0.2.28
-
-### Optional
-- `pyjwt` — Required for GLM AI Analyst (JWT token generation)
-- `websocket-client` — Enhanced real-time data feeds
-
-### External Services
-| Service | Required? | Purpose |
-|---------|-----------|---------|
-| **Discord Webhook** | ✅ Yes | Signal notifications |
-| **GLM API Key** (Zhipu AI) | Optional | AI signal scoring & briefings |
-| **Finnhub API Key** | Optional | News sentiment |
-| **NewsAPI Key** | Optional | General news sentiment |
-| **CryptoPanic API Key** | Optional | Crypto news sentiment |
-
----
-
-## 📈 Backtest
-
-`backtest.py` runs the **exact live strategy function** over history, bar by bar, with the same
-window the bot sees (`candles_per_fetch - 1` closed bars):
-
-- entry at the **next bar's open**, fees (default 0.1%/side) and slippage (0.05%) included
-- gaps through SL/TP fill at the open; SL and TP in the same bar → counted as **SL**
-- per-tier and with/against-trend breakdown, t-stat of average R
-- **walk-forward**: SL/TP, trend mode and allowed tiers are chosen only on past data and
-  evaluated on the next unseen period — the "OOS TOTAL" row is the number to trust
-
-```bash
-# CSV (header with timestamp/open/high/low/close/volume, or raw klines from data.binance.vision)
-python backtest.py --csv data/BTCUSDT-1h.csv --symbol BTC/USDT --timeframe 1h
-
-# Gold / silver from Yahoo Finance (1h: last ~730 days; 1d: full history)
 python backtest.py --yf GC=F --symbol XAU/USD --timeframe 1h
-python backtest.py --yf SI=F --symbol XAG/USD --timeframe 1d --since 2010-01-01
-
-# Download history via ccxt (cached in data/)
-python backtest.py --fetch --symbol ETH/USDT --timeframe 4h --since 2022-01-01 --trades-out trades.csv
 ```
 
-Results on real non-crypto data so far: [docs/BACKTEST_RESULTS.md](docs/BACKTEST_RESULTS.md).
+## Research — honest results
 
-Treat `|t| < 2` as "indistinguishable from noise" — a random walk regularly produces a small positive average R.
+Full write-up in [docs/BACKTEST_RESULTS.md](docs/BACKTEST_RESULTS.md).
 
-## 🔐 REST API
+- **Gold, 2012–2022 (D1/H4/H1):** the bot's own strategy loses significantly on H1; no swing strategy clears the multiple-testing
+  (Bonferroni) threshold.
+- **Gold day trading, M15:** parameters chosen on 2012–2016 and evaluated out-of-sample on 2017–2022 against a random-direction
+  baseline. **Nothing is significant after costs.** The best candidate — the London opening-range breakout after an NR7 day —
+  is implemented in `strategy/gold_orb.py` as **paper trading only**.
+- The 2017–2022 period has now been looked at, so it no longer counts as a blind test. The next hypothesis is written down before
+  seeing data from 2022-03 onward; a strategy only earns real money after passing one untouched forward period.
 
-Set `API_KEY` to require an `X-API-Key` header on every endpoint except `/api/health`.
-Without `API_KEY`, read-only endpoints stay open (local use) and `POST /api/config/update` is disabled.
-`API_CORS_ORIGINS` (comma-separated) restricts browser origins.
+## Quality
+
+- **145 GoldTape backend tests** (SQLite + PostgreSQL in CI) and **39 bot tests**: position engine, importers, encryption,
+  auth/CSRF, account isolation, AI fact validation, Telegram/Discord delivery, MCP protocol, RSS parsing (incl. XML entity attacks).
+- Protections are **mutation-tested**: removing an isolation check, the OAuth `state` check or the number validator makes a test fail.
+- Optimised code paths are checked against brute-force reference implementations.
+- Frontend type-checked and built in CI; key flows checked end-to-end in a real browser (Playwright), desktop and mobile.
+
+## Roadmap
+
+- [ ] Payments (Paddle) and plans
+- [ ] Rate limiting on public endpoints
+- [ ] More AI providers (OpenAI-compatible endpoints)
+- [ ] Forward (paper) test of the London ORB candidate on data it has never seen
+
+## Disclaimer
+
+This is an analytics and research project, not investment advice. AI commentary describes mechanisms and scenarios; it never
+tells you to buy or sell. Check data-provider licences before showing prices to paying users.
 
 ---
 
-## ⚠️ Disclaimer
+<details>
+<summary>🇵🇱 Po polsku</summary>
 
-This bot is for **educational and informational purposes only**. It does not constitute financial advice. Trading cryptocurrencies and other financial instruments involves significant risk. Always do your own research and never trade with money you can't afford to lose.
+**GoldTape** (`tape/`) to biurko tradera złota i srebra z AI: journal, który sam synchronizuje się z MT5 i IBKR; statystyki
+analityka (expectancy, drawdown, Sharpe, segmenty z testem istotności); strażnik limitów prop firm; portfel ze stopą zwrotu TWR;
+poranny brief „o czym zdecyduje dzień” na Telegramie i Discordzie; przegląd AI na własnym kluczu Claude albo DeepSeek i serwer
+MCP dla Claude Code. Zasada AI: kod liczy fakty, AI je interpretuje, a wnioski z liczbami spoza faktów są odrzucane.
 
----
+W repozytorium jest też bot sygnałowy ([docs/SIGNAL_BOT.md](docs/SIGNAL_BOT.md)), backtester walk-forward i badania strategii na
+złocie — z uczciwym wynikiem: po kosztach nic nie jest istotne statystycznie, a najlepszy kandydat działa tylko jako paper trading.
+Dokumentacja techniczna GoldTape: [`tape/README.md`](tape/README.md).
 
-## 📜 License
-
-MIT License — feel free to modify and use for your own purposes, **except**
-`strategy/neural_weight_oscillator.py`: it is a port of Zeiierman's *Neural Weight Oscillator*,
-licensed **CC BY-NC-SA 4.0** (non-commercial, share-alike). It must not be used in a paid product
-without the author's permission.
-
----
-
-<p align="center">
-  Built with Python | Powered by NWO + Stochastic + CVD + GLM AI + Market Scanner
-</p>
+</details>

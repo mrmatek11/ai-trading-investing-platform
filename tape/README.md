@@ -1,11 +1,8 @@
-# Tape
+# GoldTape — dokumentacja techniczna (`tape/`)
 
 Trading journal, analiza portfela i terminal rynkowy dla traderów **złota i srebra** —
 z globusem zdarzeń i analizą newsów AI. Specyfikacja: [`../docs/PRODUCT_SPEC.md`](../docs/PRODUCT_SPEC.md),
 research: [`../docs/RESEARCH.md`](../docs/RESEARCH.md).
-
-> Katalog tymczasowo mieszka w repo bota. Wydzielenie do osobnego repo z pełną historią:
-> `git subtree split --prefix tape -b tape-only`, potem push gałęzi `tape-only` do nowego repozytorium.
 
 ## Co działa (faza 1 — pierwszy wycinek)
 
