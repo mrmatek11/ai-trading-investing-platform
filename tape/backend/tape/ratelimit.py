@@ -7,8 +7,12 @@ dłuższym zalewie zwraca 429 z nagłówkiem Retry-After.
 Limiter jest w pamięci procesu: przy kilku workerach uvicorna każdy liczy osobno (limit efektywnie ×N).
 Pamięć jest ograniczona: nieużywane kubełki są usuwane, a przy przepełnieniu najstarsze wypadają.
 
-Adres klienta: za nginx (TAPE_TRUST_PROXY=1) bierzemy OSTATNI wpis X-Forwarded-For — ten dopisany przez
-nasz nginx. Wcześniejsze wpisy podaje klient i można je podrobić.
+Adres klienta: TAPE_TRUST_PROXY = liczba naszych proxy przed API. Każde proxy dopisuje na końcu
+X-Forwarded-For adres, od którego dostało żądanie, więc przy N proxy klient jest N-tym wpisem od końca.
+- 1 (compose): tylko nginx z obrazu `web` — bierzemy ostatni wpis;
+- 2: przed nginx jest jeszcze terminator TLS / load balancer (Caddy, Cloudflare, nginx na hoście) — przedostatni;
+- 0 lub brak: adres połączenia (API wystawione bezpośrednio).
+Wpisy dalej w lewo podaje klient i można je podrobić, dlatego nigdy nie bierzemy pierwszego.
 """
 
 from __future__ import annotations
@@ -79,9 +83,22 @@ GROUPS = {
 }
 
 
-def client_ip(peer: Optional[str], forwarded_for: Optional[str], trust_proxy: bool) -> str:
-    if trust_proxy and forwarded_for:
-        last = forwarded_for.split(",")[-1].strip()
-        if last:
-            return last
+def proxy_hops(value: Optional[str]) -> int:
+    """TAPE_TRUST_PROXY → liczba zaufanych proxy (dawne „1/true/yes” = 1)."""
+    v = (value or "").strip().lower()
+    if v in ("true", "yes"):
+        return 1
+    try:
+        return max(0, min(int(v), 10))
+    except ValueError:
+        return 0
+
+
+def client_ip(peer: Optional[str], forwarded_for: Optional[str], hops: int) -> str:
+    """Adres klienta: N-ty wpis X-Forwarded-For od końca przy N zaufanych proxy, inaczej adres połączenia."""
+    if hops > 0 and forwarded_for:
+        entries = [e.strip() for e in forwarded_for.split(",") if e.strip()]
+        if entries:
+            # krótszy nagłówek niż liczba proxy = żądanie ominęło część z nich; bierzemy najdalszy wpis dopisany przez proxy
+            return entries[-min(hops, len(entries))]
     return peer or "unknown"

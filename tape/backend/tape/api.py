@@ -219,7 +219,7 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
     limiter = rate_limiter
     if limiter is None and os.getenv("TAPE_RATE_LIMIT", "1").strip() not in ("0", "false", "no"):
         limiter = ratelimit.RateLimiter(ratelimit.DEFAULT_RULES)
-    trust_proxy = os.getenv("TAPE_TRUST_PROXY", "").strip() in ("1", "true", "yes")
+    proxy_hops = ratelimit.proxy_hops(os.getenv("TAPE_TRUST_PROXY"))
 
     @app.middleware("http")
     async def rate_limit(request: Request, call_next):
@@ -227,7 +227,7 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
         group = ratelimit.GROUPS.get(request.url.path)
         if limiter is not None and group is not None:
             ip = ratelimit.client_ip(request.client.host if request.client else None,
-                                     request.headers.get("x-forwarded-for"), trust_proxy)
+                                     request.headers.get("x-forwarded-for"), proxy_hops)
             retry = limiter.hit(group, ip)
             if retry is not None:
                 return JSONResponse({"detail": "Za dużo zapytań — spróbuj za chwilę"}, status_code=429,

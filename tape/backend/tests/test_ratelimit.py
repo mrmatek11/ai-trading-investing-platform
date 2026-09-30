@@ -3,7 +3,7 @@ import json
 from fastapi.testclient import TestClient
 
 from tape.api import create_app
-from tape.ratelimit import DEFAULT_RULES, RateLimiter, Rule, client_ip
+from tape.ratelimit import DEFAULT_RULES, RateLimiter, Rule, client_ip, proxy_hops
 
 
 class Clock:
@@ -50,10 +50,13 @@ def test_memory_is_bounded():
     assert len(rl) <= 100
 
 
-def test_client_ip_uses_last_forwarded_hop_only_behind_proxy():
-    assert client_ip("172.18.0.5", "6.6.6.6, 203.0.113.9", trust_proxy=True) == "203.0.113.9"
-    assert client_ip("172.18.0.5", "6.6.6.6", trust_proxy=False) == "172.18.0.5"
-    assert client_ip("172.18.0.5", None, trust_proxy=True) == "172.18.0.5"
+def test_client_ip_counts_trusted_proxy_hops_from_the_right():
+    assert client_ip("172.18.0.5", "6.6.6.6, 203.0.113.9", hops=1) == "203.0.113.9"      # tylko nginx
+    assert client_ip("172.18.0.5", "spoof, 203.0.113.9, 10.0.0.2", hops=2) == "203.0.113.9"   # TLS/LB + nginx
+    assert client_ip("172.18.0.5", "203.0.113.9", hops=2) == "203.0.113.9"               # ominięto LB
+    assert client_ip("172.18.0.5", "6.6.6.6", hops=0) == "172.18.0.5"
+    assert client_ip("172.18.0.5", None, hops=1) == "172.18.0.5"
+    assert [proxy_hops(v) for v in (None, "", "0", "1", "2", "true", "abc", "99")] == [0, 0, 0, 1, 2, 1, 0, 10]
 
 
 def test_public_endpoints_return_429_with_retry_after(tmp_path, monkeypatch):
