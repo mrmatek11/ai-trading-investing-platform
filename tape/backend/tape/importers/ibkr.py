@@ -15,7 +15,7 @@ import time
 import urllib.parse
 import urllib.request
 from decimal import Decimal
-from typing import Callable, List, Optional
+from typing import Callable, Optional
 from xml.etree.ElementTree import ParseError
 
 from defusedxml import ElementTree  # plik od użytkownika: blokuje encje (XXE, „billion laughs”)

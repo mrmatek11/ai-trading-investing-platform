@@ -13,7 +13,7 @@ import hashlib
 import json
 import re
 from datetime import datetime, timezone
-from typing import Dict, List, Literal, Optional, Sequence
+from typing import Dict, List, Optional, Sequence
 
 from pydantic import BaseModel, Field
 from sqlalchemy import JSON, Integer, String, select

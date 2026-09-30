@@ -42,7 +42,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install -e ".[dev,postgres]"
+      - run: pip install -e ".[dev,postgres]" ruff
+      - name: Lint (błędy i nieużywane importy)
+        run: ruff check tape tests --select F,E9
       - run: python -m pytest -q
         env:
           TAPE_TEST_POSTGRES_URL: postgresql+psycopg://tape:tape@localhost:5432/tape_test

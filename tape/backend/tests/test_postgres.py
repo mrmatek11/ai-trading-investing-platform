@@ -24,7 +24,7 @@ MT5_CSV = """Time,Deal,Symbol,Type,Direction,Volume,Price,Commission,Fee,Swap,Pr
 
 @pytest.fixture
 def client():
-    from tape.db import Base, make_sessionmaker
+    from tape.db import Base
 
     from sqlalchemy import text
 

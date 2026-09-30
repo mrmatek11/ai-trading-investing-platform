@@ -21,7 +21,7 @@ import time
 import urllib.request
 from bisect import bisect_left
 from datetime import date, datetime, timedelta, timezone
-from typing import Callable, Dict, Iterable, List, Optional, Sequence
+from typing import Callable, Dict, Iterable, List, Sequence
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import String, UniqueConstraint, select

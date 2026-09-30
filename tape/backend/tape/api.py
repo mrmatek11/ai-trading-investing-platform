@@ -30,10 +30,8 @@ from . import discord_auth
 from . import review as ai_review
 from . import sync as broker_sync
 from .auth import AuthError, Verifier, admin_subs, verifier_from_env
-from .db import (CashFlowRow, ImportRow, books as list_books, load_cash_flows, load_fills, load_fills_by_book,
-                 make_sessionmaker, store_cash_flows, store_fills)
+from .db import (CashFlowRow, ImportRow, books as list_books, load_cash_flows, load_fills, make_sessionmaker, store_cash_flows, store_fills)
 from .engine import analytics, portfolio, prop, risk, stats
-from .engine.positions import build_positions
 from .importers import BROKERS, generic, parse_file
 from .news import store as news_store
 from .news import track_record
