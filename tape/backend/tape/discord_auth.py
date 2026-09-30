@@ -12,8 +12,8 @@ Konto = "discord:<id>" (id Discorda jest stałe, nazwa użytkownika może się z
 
 Konfiguracja:
   TAPE_DISCORD_CLIENT_ID, TAPE_DISCORD_CLIENT_SECRET   — Discord Developer Portal → OAuth2
-  TAPE_APP_URL          — publiczny adres aplikacji, np. https://app.tape.example
-                          (Redirect w Discordzie: https://app.tape.example/api/auth/discord/callback)
+  TAPE_APP_URL          — publiczny adres aplikacji, np. https://app.goldtape.example
+                          (Redirect w Discordzie: https://app.goldtape.example/api/auth/discord/callback)
   TAPE_SESSION_SECRET   — losowy sekret ≥ 32 znaki do podpisu sesji
 """
 

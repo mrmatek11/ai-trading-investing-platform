@@ -1,23 +1,25 @@
 //+------------------------------------------------------------------+
-//| Tape Sync — wysyła zamknięte transakcje z MetaTrader 5 do Tape.   |
+//| Tape Sync — wysyła zamknięte transakcje z MetaTrader 5 do GoldTape. |
 //|                                                                  |
 //| Instalacja:                                                      |
-//|  1. Tape → Połączenia → „Dodaj MetaTrader 5” → skopiuj token.     |
+//|  1. GoldTape → Połączenia → „Dodaj MetaTrader 5” → skopiuj token. |
 //|  2. MT5: Narzędzia → Opcje → Doradcy → „Zezwalaj na WebRequest”   |
-//|     i dodaj adres Tape (np. https://app.tape.example).           |
+//|     i dodaj adres aplikacji (np. https://app.goldtape.example).  |
 //|  3. Skopiuj plik do MQL5/Experts, skompiluj, przeciągnij na        |
 //|     dowolny wykres i wklej token w parametrach.                   |
 //|                                                                  |
 //| EA tylko czyta historię i stan konta — nie składa, nie modyfikuje  |
 //| i nie zamyka zleceń. Od 1.10 wysyła też balance i equity, żeby    |
-//| limity prop w Tape uwzględniały otwarte pozycje. Wysyła transakcje od ostatniej udanej wysyłki;     |
-//| serwer ignoruje duplikaty, więc ponowna wysyłka jest bezpieczna.   |
+//| limity prop uwzględniały otwarte pozycje. Wysyła transakcje od    |
+//| ostatniej udanej wysyłki; serwer ignoruje duplikaty, więc ponowna |
+//| wysyłka jest bezpieczna. Odpowiedź inna niż 200 (np. 429 — limit  |
+//| zapytań) nie przesuwa znacznika: EA spróbuje w następnym cyklu.   |
 //+------------------------------------------------------------------+
-#property copyright "Tape"
+#property copyright "GoldTape"
 #property version   "1.10"
 #property strict
 
-input string TapeUrl       = "https://app.tape.example";  // adres Tape (bez końcowego /)
+input string TapeUrl       = "https://app.goldtape.example";  // adres aplikacji GoldTape (bez końcowego /)
 input string TapeToken     = "";                           // token połączenia (tps_…)
 input int    IntervalSec   = 60;                           // co ile sekund sprawdzać nowe transakcje
 input int    HistoryDays   = 90;                           // ile dni historii wysłać przy pierwszym uruchomieniu
