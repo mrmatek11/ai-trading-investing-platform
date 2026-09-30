@@ -1,0 +1,1 @@
+"""Silnik pozycji i statystyki."""

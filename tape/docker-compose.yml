@@ -1,0 +1,129 @@
+# Lokalnie / na jednym serwerze:  docker compose up --build   →  http://localhost:8080
+# Poranny brief (Telegram / Discord / aplikacja) działa zawsze; komentarz AI z ANTHROPIC_API_KEY albo DEEPSEEK_API_KEY.
+# Worker newsów, GDELT + RSS (wymaga ANTHROPIC_API_KEY albo DEEPSEEK_API_KEY):  docker compose --profile news up -d
+# Ceny XAU/XAG (wymaga TAPE_PRICE_PROVIDER):  docker compose --profile prices up -d
+# Worker `sync` co godzinę pobiera raporty IBKR Flex (wymaga TAPE_SECRET_KEYS).
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: tape
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tape-local-only}
+      POSTGRES_DB: tape
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tape -d tape"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build: ./backend
+    environment: &api-env
+      DATABASE_URL: postgresql+psycopg://tape:${POSTGRES_PASSWORD:-tape-local-only}@db:5432/tape
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      TAPE_AUTH_JWKS_URL: ${TAPE_AUTH_JWKS_URL:-}
+      TAPE_AUTH_ISSUER: ${TAPE_AUTH_ISSUER:-}
+      TAPE_AUTH_AUTHORIZED_PARTIES: ${TAPE_AUTH_AUTHORIZED_PARTIES:-}
+      TAPE_ADMIN_SUBS: ${TAPE_ADMIN_SUBS:-}
+      TAPE_API_TOKEN: ${TAPE_API_TOKEN:-}
+      TAPE_SECRET_KEYS: ${TAPE_SECRET_KEYS:-}
+      TAPE_PRICE_PROVIDER: ${TAPE_PRICE_PROVIDER:-}
+      TWELVEDATA_API_KEY: ${TWELVEDATA_API_KEY:-}
+      OANDA_TOKEN: ${OANDA_TOKEN:-}
+      OANDA_ENV: ${OANDA_ENV:-practice}
+      TAPE_CALENDAR_FEED: ${TAPE_CALENDAR_FEED:-}
+      TAPE_SMTP_HOST: ${TAPE_SMTP_HOST:-}
+      TAPE_SMTP_PORT: ${TAPE_SMTP_PORT:-587}
+      TAPE_SMTP_USER: ${TAPE_SMTP_USER:-}
+      TAPE_SMTP_PASSWORD: ${TAPE_SMTP_PASSWORD:-}
+      TAPE_MAIL_FROM: ${TAPE_MAIL_FROM:-}
+      TAPE_APP_URL: ${TAPE_APP_URL:-}
+      TAPE_DISCORD_CLIENT_ID: ${TAPE_DISCORD_CLIENT_ID:-}
+      TAPE_DISCORD_CLIENT_SECRET: ${TAPE_DISCORD_CLIENT_SECRET:-}
+      TAPE_SESSION_SECRET: ${TAPE_SESSION_SECRET:-}
+      TAPE_AI_REQUIRE_USER_KEY: ${TAPE_AI_REQUIRE_USER_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      TAPE_RSS_FEEDS: ${TAPE_RSS_FEEDS:-}
+      TAPE_BRIEF_TIME: ${TAPE_BRIEF_TIME:-07:30}
+      TAPE_BRIEF_TZ: ${TAPE_BRIEF_TZ:-Europe/Warsaw}
+      TAPE_TELEGRAM_BOT_TOKEN: ${TAPE_TELEGRAM_BOT_TOKEN:-}
+      TAPE_TELEGRAM_BOT_USERNAME: ${TAPE_TELEGRAM_BOT_USERNAME:-}
+      TAPE_TELEGRAM_CHAT_ID: ${TAPE_TELEGRAM_CHAT_ID:-}
+      TAPE_TELEGRAM_CHANNEL_URL: ${TAPE_TELEGRAM_CHANNEL_URL:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./web
+      args:
+        VITE_CLERK_PUBLISHABLE_KEY: ${VITE_CLERK_PUBLISHABLE_KEY:-}
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  sync:
+    build: ./backend
+    command: ["python", "-m", "tape.sync", "--every", "3600"]
+    environment: *api-env
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  reports:
+    build: ./backend
+    command: ["python", "-m", "tape.reports", "--every", "300"]
+    environment: *api-env
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  brief:
+    build: ./backend
+    command: ["python", "-m", "tape.brief", "--every", "60"]
+    environment: *api-env
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  prices:
+    build: ./backend
+    command: ["python", "-m", "tape.market", "--every", "300", "--backfill", "2000"]
+    environment: *api-env
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    profiles: ["prices"]
+
+  calendar:
+    build: ./backend
+    command: ["python", "-m", "tape.econ_calendar", "--every", "21600"]
+    environment: *api-env
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    profiles: ["prices"]
+
+  news:
+    build: ./backend
+    command: ["python", "-m", "tape.news.pipeline", "--every", "900"]
+    environment: *api-env
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    profiles: ["news"]
+
+volumes:
+  db-data:

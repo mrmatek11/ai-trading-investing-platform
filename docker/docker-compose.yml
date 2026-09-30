@@ -1,0 +1,53 @@
+services:
+  crypto-signal-bot:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: crypto-signal-bot
+    restart: unless-stopped
+
+    # Load variables from .env file
+    env_file:
+      - ../.env
+
+    # Persist SQLite database between restarts
+    volumes:
+      - bot-data:/app/data
+
+    # API port (only if USE_API=true)
+    ports:
+      - "8080:8080"
+
+    # Timezone + unbuffered Python logs
+    environment:
+      - TZ=Europe/Warsaw
+      - PYTHONUNBUFFERED=1
+      - SCANNER_PULSE_INTERVAL=3600
+      - USE_NEWS_MONITOR=true
+      - USE_FEAR_GREED=true
+      - USE_FUNDING_RATE=true
+      - USE_WHALE_ALERTS=true
+      - USE_ECON_CALENDAR=true
+      - USE_API=false
+      # - API_KEY=change-me            # wymagany naglowek X-API-Key (i wlacza /api/config/update)
+      # - API_CORS_ORIGINS=https://twoj-dashboard.pl
+
+    # Resource limits (lightweight — ~256MB RAM with all features)
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+        reservations:
+          memory: 128M
+          cpus: "0.1"
+
+    # Logging
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  bot-data:
