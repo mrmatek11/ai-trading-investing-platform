@@ -22,7 +22,7 @@ from decimal import ROUND_DOWN, Decimal
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence
 
-from sqlalchemy import Float, Integer, String, UniqueConstraint, select
+from sqlalchemy import Boolean, Float, Integer, String, UniqueConstraint, false, select
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from ..db import PAPER_PREFIX, Base, ExactDecimal, UtcDateTime, store_cash_flows, store_fills
@@ -112,6 +112,7 @@ class PaperRun(Base):
     status: Mapped[str] = mapped_column(String(16), default="active")      # active | stopped | mismatch
     stopped_at: Mapped[Optional[datetime]] = mapped_column(UtcDateTime, nullable=True)
     last_processed_at: Mapped[Optional[datetime]] = mapped_column(UtcDateTime, nullable=True)
+    alerts: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())   # plan dnia na Telegram/Discord
 
 
 class PaperDay(Base):
@@ -322,6 +323,7 @@ def run_dict(session: Session, run: PaperRun) -> Dict[str, object]:
             "risk_pct": float(run.risk_pct), "started_at": run.started_at.isoformat(), "first_day": run.first_day,
             "last_processed_at": run.last_processed_at.isoformat() if run.last_processed_at else None,
             "providers": providers,
+            "alerts": bool(run.alerts),
             # test z karty tylko na świecach bid (OANDA); inny dostawca = wynik orientacyjny
             "counts_for_card": not providers or set(providers) <= CARD_PROVIDERS,
             "progress": progress(session, run)}

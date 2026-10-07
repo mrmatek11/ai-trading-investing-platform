@@ -424,6 +424,7 @@ export type PaperRun = {
   last_processed_at: string | null;
   providers: string[];
   counts_for_card: boolean;
+  alerts: boolean;
   progress: PaperProgress;
 };
 export type PaperDay = {
@@ -505,6 +506,7 @@ export const api = {
   paperRun: (id: string) => get<PaperRun & { days: PaperDay[]; today: PaperPlan | null; live: PaperLive | null }>(`/api/paper/runs/${id}`),
   createPaperRun: (body: { version: string; name: string; balance: number; risk_pct: number }) => send<PaperRun>("POST", "/api/paper/runs", body),
   stopPaperRun: (id: string) => send<PaperRun>("POST", `/api/paper/runs/${id}/stop`),
+  setPaperAlerts: (id: string, enabled: boolean) => send<PaperRun>("POST", `/api/paper/runs/${id}/alerts`, { enabled }),
   generateBrief: () => send<Brief>("POST", "/api/brief/generate"),
   saveBriefSubscription: (body: { enabled: boolean; discord_webhook?: string }) => send<BriefSubscription>("PUT", "/api/brief/subscription", body),
   telegramLink: () => send<{ url: string; expires_in: number }>("POST", "/api/brief/telegram/link"),

@@ -115,6 +115,10 @@ class PaperRunIn(BaseModel):
     risk_pct: Decimal = Field(Decimal("0.5"), ge=Decimal("0.1"), le=Decimal("2"))
 
 
+class PaperAlertsIn(BaseModel):
+    enabled: bool
+
+
 class McpTokenIn(BaseModel):
     name: str = Field("Claude Code", min_length=1, max_length=80)
 
@@ -1253,6 +1257,15 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
             if run.status == "active":
                 run.status, run.stopped_at = "stopped", datetime.now(timezone.utc)
                 s.commit()
+            return paper.run_dict(s, run)
+
+    @app.post("/api/paper/runs/{run_id}/alerts")
+    def paper_run_alerts(run_id: str, body: PaperAlertsIn, account: str = Depends(current_account)):
+        """Plan dnia (zlecenia po zamknięciu zakresu) na Telegram/Discord z ustawień briefu — opt-in per przebieg."""
+        with Session() as s:
+            run = own_run(s, run_id, account)
+            run.alerts = body.enabled
+            s.commit()
             return paper.run_dict(s, run)
 
     return app

@@ -1,4 +1,5 @@
-"""Worker paper tradingu: pobiera świece M15 i rozlicza zakończone dni aktywnych przebiegów.
+"""Worker paper tradingu: pobiera świece M15, rozlicza zakończone dni aktywnych przebiegów i wysyła plan dnia
+(alerts.py) na Telegram/Discord przebiegom z włączonym `alerts`.
 
     python -m tape.paper --every 300
 
@@ -10,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import time
 from datetime import datetime, timezone
 from typing import Dict, Optional
@@ -17,12 +19,13 @@ from typing import Dict, Optional
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from . import store
+from . import alerts, store
 
 log = logging.getLogger("tape.paper")
 
 
-def run_once(session: Session, provider=None, now: Optional[datetime] = None, count: int = 200) -> Dict[str, object]:
+def run_once(session: Session, provider=None, now: Optional[datetime] = None, count: int = 200,
+             channels: Optional[alerts.Channels] = None) -> Dict[str, object]:
     now = now or datetime.now(timezone.utc)
     rep: Dict[str, object] = {}
     if provider is not None and hasattr(provider, "fetch_m15"):
@@ -42,6 +45,12 @@ def run_once(session: Session, provider=None, now: Optional[datetime] = None, co
             session.rollback()
             log.warning("paper %s: %s", run.id, exc)
     rep["recorded"] = recorded
+    if channels is not None:
+        try:                              # plan dnia na Telegram/Discord — po rozliczeniu, nigdy kosztem rozliczenia
+            rep["alerts"] = alerts.send_due(session, now, channels, os.getenv("TAPE_APP_URL", "").rstrip("/"))
+        except Exception as exc:
+            session.rollback()
+            log.warning("paper alerts: %s", exc)
     return rep
 
 
@@ -57,11 +66,12 @@ def main(argv=None):
 
     Session_ = make_sessionmaker()
     provider = provider_from_env()
+    channels = alerts.Channels.from_env()
     if provider is None or not hasattr(provider, "fetch_m15"):
         log.warning("dostawca bez świec M15 (ustaw TAPE_PRICE_PROVIDER=oanda albo twelvedata) — tylko rozliczanie")
     while True:
         with Session_() as s:
-            log.info("paper: %s", run_once(s, provider))
+            log.info("paper: %s", run_once(s, provider, channels=channels))
         if args.once:
             break
         time.sleep(max(30, args.every))

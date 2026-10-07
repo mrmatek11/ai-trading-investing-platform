@@ -124,6 +124,7 @@ def import_models() -> None:
     """Zaimportuj wszystkie moduły z tabelami, żeby były w Base.metadata."""
     from . import ai_keys, brief, econ_calendar, journal, market, mcp_server, prop_accounts, reports, review, sync  # noqa: F401
     from .news import store  # noqa: F401
+    from .paper import alerts as _paper_alerts  # noqa: F401
     from .paper import store as _paper  # noqa: F401
 
 
