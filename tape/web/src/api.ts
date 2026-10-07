@@ -422,6 +422,8 @@ export type PaperRun = {
   started_at: string;
   first_day: string;
   last_processed_at: string | null;
+  providers: string[];
+  counts_for_card: boolean;
   progress: PaperProgress;
 };
 export type PaperDay = {

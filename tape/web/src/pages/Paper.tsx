@@ -132,6 +132,12 @@ function RunDetail({ id }: { id: string }) {
           {money(r.equity, 2, false)} USD <span className={tone(r.equity - r.balance_start)}>({money(r.equity - r.balance_start, 2)})</span>
         </span>
       </div>
+      {!r.counts_for_card && (
+        <p className="text-xs text-warn">
+          Świece od dostawcy {r.providers.join(", ")} — karta zamrożenia wymaga świec po stronie bid (OANDA). Ten przebieg jest
+          orientacyjny i nie liczy się jako test.
+        </p>
+      )}
       <Progress p={r.progress} />
       {r.today && (
         <div className="rounded-md border border-line-soft px-4 py-3 text-[13px]">

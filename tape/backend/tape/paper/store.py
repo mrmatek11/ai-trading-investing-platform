@@ -66,7 +66,7 @@ VERSIONS: Dict[str, Version] = {v.id: v for v in [
                      "zakresie z 7."),
         asset="XAU",
         params={"range_min": 60, "stop": "range", "tp_r": None, "buffer": 0.1},
-        engine_sha256="253446b04edf777e02200a3c073b0946621ceab729ad6ed8dcda26e2974c2cc8",
+        engine_sha256="17a57dce2a8a01a7a934e8edfe4f4df6a7fadc7b1c7648335f1dd8f07e908220",
         cost_per_oz=0.40,
         expected_bps=4.0,
         min_trades=100,
@@ -301,13 +301,29 @@ def progress(session: Session, run: PaperRun) -> Dict[str, object]:
             "expected_bps": v.expected_bps if v else None, "passed": passed, "verdict": verdict}
 
 
+CARD_PROVIDERS = {"oanda"}            # karta zamrożenia: świece po stronie bid — tylko OANDA (price=BA) to gwarantuje
+
+
+def bar_providers(session: Session, run: PaperRun) -> List[str]:
+    """Dostawcy świec użytych od pierwszego dnia przebiegu."""
+    since = datetime.combine(date.fromisoformat(run.first_day) - timedelta(days=1), datetime.min.time(),
+                             tzinfo=timezone.utc)
+    v = VERSIONS.get(run.version)
+    return sorted(set(session.scalars(select(BarRow.provider).where(BarRow.asset == (v.asset if v else "XAU"),
+                                                                     BarRow.ts >= since).distinct())))
+
+
 def run_dict(session: Session, run: PaperRun) -> Dict[str, object]:
     v = VERSIONS.get(run.version)
+    providers = bar_providers(session, run)
     return {"id": run.id, "book": book_of(run), "name": run.name, "version": run.version,
             "version_name": v.name if v else run.version, "status": run.status,
             "balance_start": float(run.balance_start), "equity": float(equity(session, run)),
             "risk_pct": float(run.risk_pct), "started_at": run.started_at.isoformat(), "first_day": run.first_day,
             "last_processed_at": run.last_processed_at.isoformat() if run.last_processed_at else None,
+            "providers": providers,
+            # test z karty tylko na świecach bid (OANDA); inny dostawca = wynik orientacyjny
+            "counts_for_card": not providers or set(providers) <= CARD_PROVIDERS,
             "progress": progress(session, run)}
 
 

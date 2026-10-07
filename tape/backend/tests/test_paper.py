@@ -88,8 +88,10 @@ def test_nr7_pending_and_data_gaps():
     assert result_for(holes, day).status == "data_gap"                     # dziura u dostawcy w oknie NR7
     no_range = [b for b in bars if b.ts.astimezone(LONDON).strftime("%H:%M") != "08:30"]
     gap = result_for(no_range, day)
-    assert gap.status == "data_gap" and "3 z 4" in gap.note
+    assert gap.status == "data_gap" and "31 z 32" in gap.note
     assert result_for(no_range, day, check_gaps=False).status != "data_gap"
+    no_noon = [b for b in bars if not (b.ts.date() == day and b.ts.astimezone(LONDON).strftime("%H:%M") == "13:00")]
+    assert result_for(no_noon, day).status == "data_gap"                   # dziura w oknie handlu też
 
 
 def test_engine_file_is_frozen_for_the_version():
@@ -130,6 +132,8 @@ def test_run_is_forward_only_idempotent_and_sized(S):
         assert d.pnl_usd == Decimal("24.00") and store.equity(s, run) == Decimal("10024.00")
         p = store.progress(s, run)
         assert p["trades"] == 1 and p["passed"] is False and "1 z 100" in p["verdict"]
+        info = store.run_dict(s, run)
+        assert info["providers"] == ["test"] and info["counts_for_card"] is False   # nie OANDA → orientacyjnie
 
 
 def test_days_before_the_run_never_trade(S):
@@ -218,6 +222,16 @@ def test_paper_book_stays_out_of_real_stats(tmp_path):
     detail = c.get(f"/api/paper/runs/{run['id']}", headers=hdr("a")).json()
     assert detail["days"][0]["status"] == "trade" and detail["progress"]["trades"] == 1
     # cudzy przebieg, wstrzykiwanie do rachunku paper, za duże ryzyko
+    # transakcję paper da się otworzyć i opisać w journalu (szukanie po kluczu obejmuje rachunki paper)
+    key = c.get(f"/api/positions?book={run['book']}", headers=hdr("a")).json()[0]["key"]
+    det = c.get(f"/api/positions/{key}", headers=hdr("a"))
+    assert det.status_code == 200 and len(det.json()["fills"]) == 2
+    assert c.put(f"/api/positions/{key}/journal", headers=hdr("a"), json={"notes": "paper"}).status_code == 200
+    assert c.get(f"/api/positions/{key}", headers=hdr("b")).status_code == 404
+    with S() as s:                                                                         # raport tygodniowy bez paper
+        from tape import reports
+        rep = reports.weekly_report(s, "a", datetime(day.year, day.month, day.day, 20, tzinfo=timezone.utc), "")
+        assert rep is None          # prawdziwe transakcje są z sierpnia — paper z września nie może tu wejść
     assert c.get(f"/api/paper/runs/{run['id']}", headers=hdr("b")).status_code == 404
     assert c.post(f"/api/paper/runs/{run['id']}/stop", headers=hdr("b")).status_code == 404
     imp = c.post("/api/imports", headers=hdr("a"), data={"book": run["book"]},

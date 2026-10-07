@@ -405,16 +405,29 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
             setups = load_setups(s, account)
         return [position_dict(p, entries.get(p.key), setups) for p in items[:limit]]
 
+    def find_position(account: str, key: str):
+        """Pozycja po kluczu — także z rachunków paper (wyłączonych tylko z widoków „wszystkie konta”)."""
+        p = next((x for x in positions_for(account) if x.key == key), None)
+        if p is not None:
+            return p
+        with Session() as s:
+            paper_books = [paper.book_of(r) for r in s.scalars(select(paper.PaperRun)
+                                                                 .where(paper.PaperRun.account == account))]
+        for b in paper_books:
+            p = next((x for x in positions_for(account, b) if x.key == key), None)
+            if p is not None:
+                return p
+        return None
+
     @app.get("/api/positions/{key}")
     def position_detail(key: str, account: str = Depends(current_account)):
-        items = positions_for(account)
-        p = next((x for x in items if x.key == key), None)
+        p = find_position(account, key)
         if p is None:
             raise HTTPException(status_code=404, detail="Nie ma takiej pozycji")
         with Session() as s:
             entry = journal.entries_by_key(s, account).get(key)
             setups = load_setups(s, account)
-            fills = [f for f in load_fills(s, account) if f.external_id in set(p.fill_ids)]
+            fills = [f for f in load_fills(s, account, getattr(p, "book", None)) if f.external_id in set(p.fill_ids)]
             asset = {"XAUUSD": "XAU", "XAGUSD": "XAG"}.get(p.symbol, p.symbol)
             start = p.opened_at - timedelta(days=2)
             end = (p.closed_at or datetime.now(timezone.utc)) + timedelta(days=1)
@@ -436,7 +449,7 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
 
     @app.put("/api/positions/{key}/journal")
     def save_journal(key: str, body: JournalIn, account: str = Depends(current_account)):
-        p = next((x for x in positions_for(account) if x.key == key), None)
+        p = find_position(account, key)
         if p is None:
             raise HTTPException(status_code=404, detail="Nie ma takiej pozycji")
         if body.initial_stop is not None and (p.avg_entry - body.initial_stop) * p.direction <= 0:

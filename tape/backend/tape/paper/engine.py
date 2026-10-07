@@ -182,6 +182,7 @@ def run_day(day: Sequence[_S], orders: Sequence[Order]) -> Optional[Trade]:
 # ─── kompletność danych (tylko tryb na żywo — w badaniu jej nie było) ──────────
 
 MIN_BARS_PER_DAY = 60          # pełny dzień złota to ~92 świece; mniej = dziura u dostawcy, NR7 byłby fałszywy
+# Okno handlu 08:00–16:00 Londynu musi mieć wszystkie 32 świece M15 (patrz data_gap).
 
 
 def data_gap(days: Sequence[Tuple[date, List[_S]]], i: int, params: dict) -> str:
@@ -191,11 +192,13 @@ def data_gap(days: Sequence[Tuple[date, List[_S]]], i: int, params: dict) -> str
     short = [str(d) for d, bars in days[i - 7: i] if len(bars) < MIN_BARS_PER_DAY]
     if short:
         return f"niepełne dni w oknie NR7: {', '.join(short)}"
+    # całe okno od zakresu do zamknięcia (08:00–16:00 Londynu): brak świecy mógłby ukryć wybicie albo stop
+    # i przesunąć wyjście o czasie — takiego dnia nie da się rozliczyć uczciwie
     day = days[i][1]
-    rm = params["range_min"]
-    have = sum(1 for s in day if s.dmin >= 300 and 8 * 60 <= s.ldn_min < 8 * 60 + rm)
-    if have < rm // 15:
-        return f"zakres 08:00 Londynu ma {have} z {rm // 15} świec"
+    need = (16 * 60 - 8 * 60) // 15
+    have = sum(1 for s in day if s.dmin >= 300 and 8 * 60 <= s.ldn_min < 16 * 60)
+    if have < need:
+        return f"okno 08:00–16:00 Londynu ma {have} z {need} świec"
     return ""
 
 
