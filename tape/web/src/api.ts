@@ -449,6 +449,29 @@ export type PaperPlan = {
   active: boolean;
   orders: { direction: 1 | -1; entry: number; stop: number; valid_until: string | null; flat_by: string }[];
 };
+// Podgląd dnia w trakcie — wstępny, nic nie zapisuje; oficjalny wynik po 16:00 Londynu.
+export type PaperLive = {
+  provisional: true;
+  day: string;
+  status: "waiting_for_range" | "orders_working" | "in_position" | "stopped_out" | "flat_awaiting_close";
+  as_of: string;
+  mark: number;
+  orders: { direction: 1 | -1; entry: number; stop: number }[];
+  valid_until: string | null;
+  flat_by: string | null;
+  direction: 1 | -1 | null;
+  entry: number | null;
+  entry_time: string | null;
+  stop: number | null;
+  exit: number | null;
+  exit_time: string | null;
+  reason: "sl" | "time" | null;
+  gross: number | null;
+  net: number | null;
+  lots: number | null;
+  pnl_usd: number | null;
+  equity: number;
+};
 export type PaperOverview = {
   versions: PaperVersion[];
   runs: PaperRun[];
@@ -479,7 +502,7 @@ export const api = {
   deleteAiKey: () => send<{ ok: boolean }>("DELETE", "/api/ai/key"),
   brief: () => get<BriefResponse>("/api/brief"),
   paper: () => get<PaperOverview>("/api/paper"),
-  paperRun: (id: string) => get<PaperRun & { days: PaperDay[]; today: PaperPlan | null }>(`/api/paper/runs/${id}`),
+  paperRun: (id: string) => get<PaperRun & { days: PaperDay[]; today: PaperPlan | null; live: PaperLive | null }>(`/api/paper/runs/${id}`),
   createPaperRun: (body: { version: string; name: string; balance: number; risk_pct: number }) => send<PaperRun>("POST", "/api/paper/runs", body),
   stopPaperRun: (id: string) => send<PaperRun>("POST", `/api/paper/runs/${id}/stop`),
   generateBrief: () => send<Brief>("POST", "/api/brief/generate"),

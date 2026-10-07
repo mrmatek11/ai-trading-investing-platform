@@ -37,6 +37,7 @@ from .news import store as news_store
 from .news import track_record
 from .news.bias import aggregate, event_to_dict
 from .news.sample import sample_events
+from .paper import live as paper_live
 from .paper import store as paper
 from .paper.store import is_paper_book
 from .secretbox import SecretBox
@@ -1242,7 +1243,8 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
             days = s.scalars(select(paper.PaperDay).where(paper.PaperDay.run_id == run.id)
                              .order_by(paper.PaperDay.day.desc()).limit(400))
             return {**paper.run_dict(s, run), "days": [paper.day_dict(d) for d in days],
-                    "today": paper.today_plan(s, run)}
+                    "today": paper.today_plan(s, run),
+                    "live": paper_live.preview(s, run)}          # wstępny podgląd dnia w trakcie — niczego nie zapisuje
 
     @app.post("/api/paper/runs/{run_id}/stop")
     def stop_paper_run(run_id: str, account: str = Depends(current_account)):

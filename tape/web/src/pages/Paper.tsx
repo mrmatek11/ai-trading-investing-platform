@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { api, type PaperDay, type PaperOverview, type PaperProgress, type PaperRun } from "../api";
+import { api, type PaperDay, type PaperLive, type PaperOverview, type PaperProgress, type PaperRun } from "../api";
 import { useBook } from "../book";
 import { money, num, tone } from "../format";
 
@@ -13,6 +13,45 @@ const STATUS: Record<PaperDay["status"], string> = {
 };
 const RUN_STATUS: Record<PaperRun["status"], string> = { active: "aktywny", stopped: "zatrzymany", mismatch: "kod zmieniony" };
 const hhmm = (iso: string | null) => (iso ? new Date(iso).toLocaleTimeString("pl-PL", { hour: "2-digit", minute: "2-digit" }) : "—");
+
+const LIVE: Record<PaperLive["status"], string> = {
+  waiting_for_range: "zakres 08:00–09:00 Londynu jeszcze trwa",
+  orders_working: "zlecenia czekają na wybicie",
+  in_position: "w pozycji",
+  stopped_out: "stop loss trafiony",
+  flat_awaiting_close: "bez pozycji — czeka na rozliczenie po 16:00",
+};
+
+// Dzień w trakcie na zamkniętych świecach M15 — tylko podgląd; rozliczenie dnia robi worker po 16:00 Londynu.
+function Live({ l }: { l: PaperLive }) {
+  const side = l.direction === 1 ? "long" : "short";
+  return (
+    <div className="mt-2 flex flex-col gap-1 border-t border-line-soft pt-2">
+      <div className="flex flex-wrap items-baseline gap-2">
+        <span className="font-medium">Teraz: {LIVE[l.status]}</span>
+        <span className="rounded border border-line px-1.5 text-[11px] text-warn">wynik wstępny</span>
+        <div className="flex-1" />
+        <span className="num text-xs text-muted">stan na {hhmm(l.as_of)} · cena {num(l.mark, 2)}</span>
+      </div>
+      {l.entry != null && (
+        <span className="num">
+          {side} od {num(l.entry, 2)} ({hhmm(l.entry_time)}) · SL {num(l.stop, 2)}
+          {l.exit != null && <> · wyjście {num(l.exit, 2)} ({l.reason === "sl" ? "stop loss" : "zamknięcie 16:00"})</>}
+          {" · "}
+          <span className={tone(l.net)}>{num(l.net, 2, true)} USD/oz</span>
+          {l.lots != null && l.lots > 0 ? (
+            <> · {num(l.lots, 2)} lota · <span className={tone(l.pnl_usd)}>{money(l.pnl_usd ?? 0)} USD</span></>
+          ) : (
+            <span className="text-muted"> · pozycja poniżej minimalnego lota</span>
+          )}
+        </span>
+      )}
+      <span className="text-xs text-muted">
+        Po koszcie 0,40 USD/oz, z ostatniej zamkniętej świecy M15. Oficjalny wynik dnia zapisuje się dopiero po 16:00 Londynu.
+      </span>
+    </div>
+  );
+}
 
 // Postęp względem karty zamrożenia: liczba transakcji i t-stat na wyniku za uncję po koszcie z badania.
 function Meter({ label, value, need, text }: { label: string; value: number; need: number; text: string }) {
@@ -152,6 +191,7 @@ function RunDetail({ id }: { id: string }) {
               <span className="text-muted"> · ważne do {hhmm(r.today.orders[0].valid_until)}, zamknięcie do {hhmm(r.today.orders[0].flat_by)}</span>
             </span>
           )}
+          {r.live && <Live l={r.live} />}
         </div>
       )}
       <div className="overflow-x-auto">
