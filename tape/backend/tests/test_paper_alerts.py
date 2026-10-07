@@ -97,15 +97,15 @@ def test_plan_is_sent_once_after_range_closes(db, box):
 def test_not_before_range_closes(db):
     S, _ = db
     bars, day = history()
-    seed(S, bars, at(day, "09:05"))                                      # świeca 08:45 jest, 09:00 jeszcze nie
+    seed(S, bars, at(day, "08:50"))                                      # świeca 08:45 jeszcze trwa
     tg = FakeTelegram()
     with S() as s:
-        assert alerts.send_due(s, at(day, "09:05"), alerts.Channels(tg))["sent"] == 0
-        assert alerts.send_due(s, at(day, "09:14"), alerts.Channels(tg))["sent"] == 0
-        store.save_bars(s, "XAU", live(bars, at(day, "09:15")), "oanda")   # świeca 09:00 zamknięta
+        assert alerts.send_due(s, at(day, "08:50"), alerts.Channels(tg))["sent"] == 0
+        assert alerts.send_due(s, at(day, "08:59"), alerts.Channels(tg))["sent"] == 0
+        store.save_bars(s, "XAU", live(bars, at(day, "09:00")), "oanda")   # 08:45 zamknięta → zakres ostateczny
         s.commit()
-        assert alerts.send_due(s, at(day, "09:15"), alerts.Channels(tg))["sent"] == 1
-    assert len(tg.sent) == 1
+        assert alerts.send_due(s, at(day, "09:00"), alerts.Channels(tg))["sent"] == 1
+    assert len(tg.sent) == 1 and "Za późno" not in tg.sent[0][1]
 
 
 def test_late_plan_warns_when_a_level_is_already_crossed(db):

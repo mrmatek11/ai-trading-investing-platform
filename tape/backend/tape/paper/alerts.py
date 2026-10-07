@@ -86,9 +86,8 @@ def due_plan(session: Session, run: store.PaperRun, now: datetime,
     days = engine.group_days(bars)
     if not days or days[-1][0] != day:
         return None
-    closed = 8 * 60 + int(v.params["range_min"])                    # 09:00 Londynu
-    if not any(s.dmin >= 300 and s.ldn_min >= closed for s in days[-1][1]):
-        return None                                                  # świecy z 09:00 jeszcze nie ma
+    # zakres jest ostateczny, gdy zapisane są wszystkie 4 zamknięte świece 08:00–08:45 (planned_orders tego wymaga),
+    # więc plan wychodzi ok. 09:00 — zanim pierwsza świeca po zakresie mogłaby przebić poziom
     cancel = last.orders[0].cancel_if_no_fill
     if cancel is not None and now >= cancel:
         return None                                                  # po 12:00 Londynu plan jest nieaktualny
