@@ -10,7 +10,8 @@ Zasady:
 - poziomy liczy silnik (`engine.evaluate` → `planned_orders`), ten sam podział na dni co `store.today_plan`;
 - zakres uznajemy za zamknięty dopiero, gdy w bazie jest świeca z 09:00 Londynu (świece są zapisywane
   tylko zamknięte, więc wtedy zakres jest ostateczny);
-- po 12:00 Londynu (zlecenia wygasły) nic już nie wysyłamy;
+- po 12:00 Londynu (zlecenia wygasły) nic już nie wysyłamy; jeśli świeca od 09:00 przebiła już poziom,
+  wiadomość ostrzega „za późno” zamiast podawać zlecenia do złożenia;
 - kanały i dziennik jak w porannym briefie: czat Telegram i webhook Discord z `BriefSubscription` właściciela;
   każda próba (udana albo nie) zostaje w `paper_alert_deliveries` — po restarcie workera nie ma duplikatów.
 """
@@ -91,12 +92,19 @@ def due_plan(session: Session, run: store.PaperRun, now: datetime,
     cancel = last.orders[0].cancel_if_no_fill
     if cancel is not None and now >= cancel:
         return None                                                  # po 12:00 Londynu plan jest nieaktualny
+    # świece od 09:00 już są: jeśli któraś przebiła poziom, strategia weszła w pozycję (OCO, remis → long)
+    filled = None
+    for o in last.orders:
+        hit = next((x.bar.ts for x in days[-1][1] if x.bar.ts >= o.start and
+                    (x.bar.high >= o.entry if o.direction == 1 else x.bar.low <= o.entry)), None)
+        if hit is not None and (filled is None or hit < filled["ts"]):
+            filled = {"direction": o.direction, "ts": hit}
     eq = store.equity(session, run)
     orders = [{"direction": o.direction, "entry": round(o.entry, 2), "stop": round(o.stop, 2),
                "lots": store._lots(eq, run.risk_pct, o.entry, o.stop, run)} for o in last.orders]
     return {"day": day, "run_id": run.id, "name": run.name, "version": run.version, "equity": eq,
             "risk_pct": run.risk_pct, "risk_usd": (eq * run.risk_pct / Decimal(100)).quantize(Decimal("0.01")),
-            "orders": orders, "valid_until": cancel, "flat_by": last.orders[0].deadline}
+            "orders": orders, "valid_until": cancel, "flat_by": last.orders[0].deadline, "filled": filled}
 
 
 # ─── formatowanie ──────────────────────────────────────────────────────────────
@@ -115,17 +123,29 @@ def _money(x: Decimal) -> str:
     return f"{x:,.2f}".replace(",", " ")
 
 
+def _late(p: Dict[str, object]) -> Optional[str]:
+    f = p.get("filled")
+    if not f:
+        return None
+    side = "kupna" if f["direction"] == 1 else "sprzedaży"
+    pos = "long" if f["direction"] == 1 else "short"
+    return (f"⚠️ Za późno: poziom {side} przebity już w świecy z {_times(f['ts'])}. Strategia weszła już w pozycję {pos} "
+            "(drugie zlecenie anulowane przez OCO) — NIE składaj tych zleceń, poziomy tylko informacyjnie.")
+
+
 def _order_lines(p: Dict[str, object]) -> List[str]:
-    out = []
+    out = [] if not p.get("filled") else [_late(p)]
     for o in p["orders"]:
         side = "🟢 KUPNO STOP" if o["direction"] == 1 else "🔴 SPRZEDAŻ STOP"
-        out.append(f"{side} {o['entry']:.2f} · SL {o['stop']:.2f} · {_lots(o['lots'])}")
+        if p.get("filled"):
+            out.append(f"({side.split(' ', 1)[1].lower()} {o['entry']:.2f} · SL {o['stop']:.2f})")
+        else:
+            out.append(f"{side} {o['entry']:.2f} · SL {o['stop']:.2f} · {_lots(o['lots'])}")
     return out
 
 
 def _rules(p: Dict[str, object]) -> List[str]:
-    return [
-        "OCO: gdy jedno zlecenie się wypełni, anuluj drugie.",
+    return ([] if p.get("filled") else ["OCO: gdy jedno zlecenie się wypełni, anuluj drugie."]) + [
         f"Zlecenia ważne do {_times(p['valid_until'])} — potem anuluj niewypełnione.",
         f"Pozycję zamknij najpóźniej o {_times(p['flat_by'])}.",
         f"Wielkość: kapitał {_money(p['equity'])} USD, ryzyko {p['risk_pct']:g}% (≈ {_money(p['risk_usd'])} USD do SL).",

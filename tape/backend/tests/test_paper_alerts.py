@@ -81,6 +81,7 @@ def test_plan_is_sent_once_after_range_closes(db, box):
     assert f"plan dnia {day}" in text
     assert "KUPNO STOP 2004.80 · SL 1996.00 · 0.05 lota" in text          # 50 USD / (8,8 × 100 oz) → 0,05
     assert "SPRZEDAŻ STOP 1995.20 · SL 2004.00 · 0.05 lota" in text
+    assert "Za późno" not in text
     assert "OCO" in text and "12:00 Londyn (13:00 Warszawa)" in text and "16:00 Londyn (17:00 Warszawa)" in text
     assert "nie jest rekomendacja" in text and "Paper test" in text
     url, body = posts[0]
@@ -105,6 +106,18 @@ def test_not_before_range_closes(db):
         s.commit()
         assert alerts.send_due(s, at(day, "09:15"), alerts.Channels(tg))["sent"] == 1
     assert len(tg.sent) == 1
+
+
+def test_late_plan_warns_when_a_level_is_already_crossed(db):
+    S, _ = db
+    bars, day = history(signal_overrides={"09:00": (2003, 2006, 2002, 2005)})   # wybicie w pierwszej świecy
+    seed(S, bars, at(day, "09:20"))
+    tg = FakeTelegram()
+    with S() as s:
+        assert alerts.send_due(s, at(day, "09:20"), alerts.Channels(tg))["sent"] == 1
+    text = tg.sent[0][1]
+    assert "Za późno" in text and "09:00 Londyn (10:00 Warszawa)" in text and "pozycję long" in text
+    assert "KUPNO STOP 2004.80 ·" not in text and "OCO: gdy" not in text and "(kupno stop 2004.80 · SL 1996.00)" in text
 
 
 def test_not_after_orders_expire(tmp_path):
