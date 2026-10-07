@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api, type PaperDay, type PaperOverview, type PaperProgress, type PaperRun } from "../api";
 import { useBook } from "../book";
+import { PaperAlertsToggle } from "../components/PaperAlertsToggle";
 import { money, num, tone } from "../format";
 
 const STATUS: Record<PaperDay["status"], string> = {
@@ -139,6 +140,7 @@ function RunDetail({ id }: { id: string }) {
         </p>
       )}
       <Progress p={r.progress} />
+      {r.status === "active" && <PaperAlertsToggle run={r} />}
       {r.today && (
         <div className="rounded-md border border-line-soft px-4 py-3 text-[13px]">
           <span className="font-medium">Dziś ({r.today.day}): </span>
