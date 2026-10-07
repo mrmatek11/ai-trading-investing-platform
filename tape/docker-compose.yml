@@ -1,7 +1,8 @@
 # Lokalnie / na jednym serwerze:  docker compose up --build   →  http://localhost:8080
 # Poranny brief (Telegram / Discord / aplikacja) działa zawsze; komentarz AI z ANTHROPIC_API_KEY albo DEEPSEEK_API_KEY.
 # Worker newsów, GDELT + RSS (wymaga ANTHROPIC_API_KEY albo DEEPSEEK_API_KEY):  docker compose --profile news up -d
-# Ceny XAU/XAG (wymaga TAPE_PRICE_PROVIDER):  docker compose --profile prices up -d
+# Ceny XAU/XAG, kalendarz i paper trading (wymaga TAPE_PRICE_PROVIDER; paper — oanda albo twelvedata):
+#   docker compose --profile prices up -d
 # Worker `sync` co godzinę pobiera raporty IBKR Flex (wymaga TAPE_SECRET_KEYS).
 services:
   db:
@@ -102,6 +103,16 @@ services:
   prices:
     build: ./backend
     command: ["python", "-m", "tape.market", "--every", "300", "--backfill", "2000"]
+    environment: *api-env
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    profiles: ["prices"]
+
+  paper:
+    build: ./backend
+    command: ["python", "-m", "tape.paper", "--every", "300"]
     environment: *api-env
     depends_on:
       db:

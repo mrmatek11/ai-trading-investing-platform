@@ -48,11 +48,25 @@ export function BookSelect() {
         className="h-8 max-w-44 rounded-md border border-line bg-surface px-2 text-[13px] text-fg"
       >
         <option value="__all">Wszystkie konta</option>
-        {list.map((b) => (
-          <option key={b.id || "_import"} value={b.id}>
-            {b.label}
-          </option>
-        ))}
+        {list
+          .filter((b) => b.kind !== "paper")
+          .map((b) => (
+            <option key={b.id || "_import"} value={b.id}>
+              {b.label}
+            </option>
+          ))}
+        {list.some((b) => b.kind === "paper") && (
+          // paper nie wchodzi do „wszystkich kont” — tylko po jawnym wyborze
+          <optgroup label="Paper trading">
+            {list
+              .filter((b) => b.kind === "paper")
+              .map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.label}
+                </option>
+              ))}
+          </optgroup>
+        )}
       </select>
     </label>
   );

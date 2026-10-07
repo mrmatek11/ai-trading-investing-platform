@@ -42,6 +42,16 @@ const NAV: { to: string; label: string; icon: ReactNode }[] = [
     ),
   },
   {
+    to: "/paper",
+    label: "Paper trading",
+    icon: (
+      <>
+        <path d="M4 19h16" />
+        <path d="M6 15l4-4 3 3 5-6" strokeDasharray="2 2.2" />
+      </>
+    ),
+  },
+  {
     to: "/portfolio",
     label: "Portfel",
     icon: (
@@ -104,6 +114,8 @@ const COMMANDS: Record<string, string> = {
   PF: "/portfolio",
   CONNECT: "/connections",
   BRIEF: "/brief",
+  PAPER: "/paper",
+  TEST: "/paper",
   NEWS: "/brief",
   MORNING: "/brief",
 };

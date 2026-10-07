@@ -113,6 +113,24 @@ wymaga kolejnego, jeszcze nieoglądanego okresu danych.
   trzeba najpierw napisać i zamrozić tę strategię (wejście, stop, czas wyjścia), a dopiero potem otworzyć dane.
 - Brak istotności = strategia zostaje w paper tradingu albo jest porzucona, a nie „dostrajana” pod nowe dane.
 
+**Aneks 1 (2026-10-07) — paper trading w GoldTape, zapisany przed obejrzeniem jakiejkolwiek nowej świecy**
+- Silnik na żywo: `tape/backend/tape/paper/engine.py` (Python bez pandas), wersja `london-orb-nr7@1`,
+  SHA-256 pliku `253446b04edf777e02200a3c073b0946621ceab729ad6ed8dcda26e2974c2cc8` (zapisany też w
+  `tape/paper/store.py`; test pada, gdy plik się zmieni — wtedy nowa wersja i test od zera).
+- Zgodność z zamrożonym badaniem sprawdzona transakcja po transakcji na danych 2012-05 → 2022-03-04
+  (już zużytych, więc to nic nie kosztuje): **323 transakcje w obu, 0 różnic** w dniu, kierunku, cenie wejścia,
+  wyjściu, powodzie i wyniku. Kontrola czułości: zmiana reguły remisu OCO albo okna Londynu daje różnice.
+- Strona ceny: świece **bid** (OANDA `price=BA`, strona bid). Eksport MT5 użyty w badaniu jest standardowo po bid —
+  tego nie zweryfikowałem w źródle danych; przesunięcie o pół spreadu zmienia poziomy wejścia o ok. 0,15 USD.
+  Twelve Data — strona ceny niezweryfikowana.
+- Podstawa kryterium: wynik za uncję po **stałym koszcie 0,40 USD/oz**, jak w badaniu, niezależnie od wielkości
+  pozycji. Wynik po rzeczywistym spreadzie jest tylko miarą pomocniczą.
+- Reguła luk w danych (nie było jej w badaniu, ustalona z góry): dzień jest pomijany jako „dziura w danych”, gdy
+  któryś z 7 poprzednich dni handlowych ma mniej niż 60 świec M15 albo zakres 08:00–09:00 Londynu nie ma 4 świec.
+  Na danych badania pominęłaby 2 z 323 transakcji.
+- Tylko do przodu: przebieg handluje dniami handlowymi po dniu startu; starsze świece służą wyłącznie do NR7.
+  W aplikacji nie ma odtwarzania historii.
+
 ## Inne rynki
 
 Uruchom lokalnie dla aktualnych danych metali (Yahoo Finance):

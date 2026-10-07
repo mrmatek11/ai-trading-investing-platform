@@ -71,10 +71,52 @@ def _json(opener: Opener, url: str, headers: Optional[Dict[str, str]] = None):
         raise ProviderError(f"niepoprawna odpowiedź JSON z {urllib.parse.urlsplit(url).netloc}") from exc
 
 
+M15 = timedelta(minutes=15)
+
+
+def _bars_from(rows, now: datetime):
+    """[(start, o, h, l, c, spread)] → zamknięte świece M15 (engine.Bar), posortowane."""
+    from .paper.engine import Bar
+
+    return sorted((Bar(t, o, h, lo, c, sp) for t, o, h, lo, c, sp in rows if t + M15 <= now), key=lambda b: b.ts)
+
+
+def twelvedata_m15(self, asset: str, now: datetime, count: int = 200):
+    """Świece M15 z Twelve Data. ⚠️ Strona ceny (bid/mid) niezweryfikowana — badanie było na bid."""
+    q = urllib.parse.urlencode({"symbol": self.symbols[asset], "interval": "15min", "outputsize": count,
+                                "timezone": "UTC", "apikey": self.key})
+    data = _json(self.opener, f"{self.base}/time_series?{q}")
+    if data.get("status") == "error":
+        raise ProviderError(f"Twelve Data: {data.get('message', 'błąd')} (kod {data.get('code')})")
+    rows = [(datetime.strptime(v["datetime"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc),
+             float(v["open"]), float(v["high"]), float(v["low"]), float(v["close"]), None)
+            for v in data.get("values", [])]
+    return _bars_from(rows, now)
+
+
+def oanda_m15(self, asset: str, now: datetime, count: int = 200):
+    """Świece M15 z OANDA po stronie BID (jak eksport MT5 w badaniu) + spread z zamknięcia ask − bid."""
+    q = urllib.parse.urlencode({"granularity": "M15", "count": count, "price": "BA"})
+    data = _json(self.opener, f"{self.base}/v3/instruments/{self.symbols[asset]}/candles?{q}",
+                 {"Authorization": f"Bearer {self.token}", "Accept-Datetime-Format": "RFC3339"})
+    if "candles" not in data:
+        raise ProviderError(f"OANDA: {data.get('errorMessage', 'brak świec w odpowiedzi')}")
+    rows = []
+    for c in data["candles"]:
+        if not c.get("complete"):
+            continue
+        b, a = c["bid"], c.get("ask")
+        start = datetime.fromisoformat(c["time"][:19]).replace(tzinfo=timezone.utc)
+        spread = round(float(a["c"]) - float(b["c"]), 4) if a else None
+        rows.append((start, float(b["o"]), float(b["h"]), float(b["l"]), float(b["c"]), spread))
+    return _bars_from(rows, now)
+
+
 class TwelveData:
     name = "twelvedata"
     base = "https://api.twelvedata.com"
     symbols = {"XAU": "XAU/USD", "XAG": "XAG/USD"}
+    fetch_m15 = twelvedata_m15
 
     def __init__(self, api_key: str, opener: Opener = _default_opener):
         self.key, self.opener = api_key, opener
@@ -101,6 +143,7 @@ class Oanda:
     name = "oanda"
     hosts = {"practice": "https://api-fxpractice.oanda.com", "live": "https://api-fxtrade.oanda.com"}
     symbols = {"XAU": "XAU_USD", "XAG": "XAG_USD"}
+    fetch_m15 = oanda_m15
 
     def __init__(self, token: str, env: str = "practice", opener: Opener = _default_opener):
         if env not in self.hosts:

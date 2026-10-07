@@ -37,6 +37,8 @@ from .news import store as news_store
 from .news import track_record
 from .news.bias import aggregate, event_to_dict
 from .news.sample import sample_events
+from .paper import store as paper
+from .paper.store import is_paper_book
 from .secretbox import SecretBox
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
@@ -103,6 +105,13 @@ class AiKeyIn(BaseModel):
 class BriefSubscriptionIn(BaseModel):
     enabled: bool = True
     discord_webhook: Optional[str] = Field(None, max_length=300)   # None = bez zmian, "" = odłącz
+
+
+class PaperRunIn(BaseModel):
+    version: str = Field(max_length=64)
+    name: str = Field("", max_length=80)
+    balance: Decimal = Field(Decimal(10000), ge=100, le=10_000_000)
+    risk_pct: Decimal = Field(Decimal("0.5"), ge=Decimal("0.1"), le=Decimal("2"))
 
 
 class McpTokenIn(BaseModel):
@@ -373,6 +382,8 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
         result = parse_file(data, file.filename or "upload.csv", broker=broker if broker != "generic" else None,
                             tz=tz, mapping=parsed_mapping)
         source = result.detected or (broker or "unknown")
+        if is_paper_book(book.strip()):
+            raise HTTPException(status_code=400, detail="Rachunki paper prowadzi tylko silnik paper tradingu")
         with Session() as s:
             new, dup = store_fills(s, account, source, result.fills, book.strip()) if result.fills else (0, 0)
             flows_new = store_cash_flows(s, account, source, result.cash_flows, book.strip())
@@ -634,7 +645,13 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
         out = [{"id": c.id, "label": c.label, "kind": c.kind, "has_trades": c.id in used} for c in conns.values()]
         out += [{"id": b, "label": b or "Import z plików", "kind": "import", "has_trades": True}
                 for b in used if b not in conns]
-        return sorted(out, key=lambda x: (x["kind"] != "import" or x["id"] != "", x["label"].lower()))
+        out = sorted(out, key=lambda x: (x["kind"] != "import" or x["id"] != "", x["label"].lower()))
+        with Session() as s:                          # paper na końcu i tylko po jawnym wyborze — nie wchodzi do „wszystkich”
+            runs = s.scalars(select(paper.PaperRun).where(paper.PaperRun.account == account)
+                             .order_by(paper.PaperRun.started_at))
+            out += [{"id": paper.book_of(r), "label": f"Paper · {r.name}", "kind": "paper", "has_trades": True}
+                    for r in runs]
+        return out
 
     # ---- portfel ----
 
@@ -679,6 +696,8 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
     def add_cash_flow(body: CashFlowIn, account: str = Depends(current_account)):
         if body.amount == 0:
             raise HTTPException(status_code=422, detail="Kwota nie może być zerowa")
+        if is_paper_book(body.book):
+            raise HTTPException(status_code=400, detail="Saldo rachunku paper ustala się przy starcie przebiegu")
         ts = body.ts if body.ts.tzinfo else body.ts.replace(tzinfo=timezone.utc)
         with Session() as s:
             row = CashFlowRow(account=account, source="manual", book=body.book, external_id=uuid.uuid4().hex, ts=ts,
@@ -1165,5 +1184,60 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
         if out is None:
             return JSONResponse(None, status_code=202)
         return JSONResponse(out)
+
+    # ---- paper trading: zamrożone wersje strategii na żywych cenach ----
+
+    def own_run(s, run_id: str, account: str):
+        run = s.get(paper.PaperRun, run_id)
+        if run is None or run.account != account:
+            raise HTTPException(status_code=404, detail="Nie ma takiego przebiegu")
+        return run
+
+    @app.get("/api/paper")
+    def paper_overview(account: str = Depends(current_account)):
+        prov = os.getenv("TAPE_PRICE_PROVIDER", "").strip().lower()
+        with Session() as s:
+            runs = list(s.scalars(select(paper.PaperRun).where(paper.PaperRun.account == account)
+                                  .order_by(paper.PaperRun.started_at.desc())))
+            last_bar = s.scalars(select(paper.BarRow.ts).order_by(paper.BarRow.ts.desc()).limit(1)).first()
+            return {
+                "versions": [{"id": v.id, "name": v.name, "description": v.description, "asset": v.asset,
+                              "params": v.params, "cost_per_oz": v.cost_per_oz, "expected_bps": v.expected_bps,
+                              "min_trades": v.min_trades, "t_threshold": v.t_threshold, "frozen_ok": paper.version_ok(v)}
+                             for v in paper.VERSIONS.values()],
+                "runs": [paper.run_dict(s, r) for r in runs],
+                "provider": prov or None,
+                "bars_available": prov in ("oanda", "twelvedata"),
+                "last_bar": last_bar.isoformat() if last_bar else None,
+                "max_risk_pct": paper.MAX_RISK_PCT,
+            }
+
+    @app.post("/api/paper/runs", status_code=201)
+    def create_paper_run(body: PaperRunIn, account: str = Depends(current_account)):
+        with Session() as s:
+            try:
+                run = paper.create_run(s, account, body.version, body.balance, body.risk_pct, body.name)
+            except paper.PaperError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            s.commit()
+            return paper.run_dict(s, run)
+
+    @app.get("/api/paper/runs/{run_id}")
+    def paper_run(run_id: str, account: str = Depends(current_account)):
+        with Session() as s:
+            run = own_run(s, run_id, account)
+            days = s.scalars(select(paper.PaperDay).where(paper.PaperDay.run_id == run.id)
+                             .order_by(paper.PaperDay.day.desc()).limit(400))
+            return {**paper.run_dict(s, run), "days": [paper.day_dict(d) for d in days],
+                    "today": paper.today_plan(s, run)}
+
+    @app.post("/api/paper/runs/{run_id}/stop")
+    def stop_paper_run(run_id: str, account: str = Depends(current_account)):
+        with Session() as s:
+            run = own_run(s, run_id, account)
+            if run.status == "active":
+                run.status, run.stopped_at = "stopped", datetime.now(timezone.utc)
+                s.commit()
+            return paper.run_dict(s, run)
 
     return app

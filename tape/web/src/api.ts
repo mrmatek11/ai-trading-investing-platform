@@ -385,7 +385,76 @@ export type AiSettings = {
 
 export type UserSettings = { email: string; weekly_report: boolean; prop_alerts: boolean; mail_configured: boolean };
 
-export type Book = { id: string; label: string; kind: "mt5_push" | "ibkr_flex" | "import"; has_trades: boolean };
+export type Book = { id: string; label: string; kind: "mt5_push" | "ibkr_flex" | "import" | "paper"; has_trades: boolean };
+
+export type PaperVersion = {
+  id: string;
+  name: string;
+  description: string;
+  asset: string;
+  params: Record<string, unknown>;
+  cost_per_oz: number;
+  expected_bps: number;
+  min_trades: number;
+  t_threshold: number;
+  frozen_ok: boolean;
+};
+export type PaperProgress = {
+  trades: number;
+  need_trades: number;
+  mean_bps: number | null;
+  t_stat: number | null;
+  need_t: number;
+  expected_bps: number | null;
+  passed: boolean;
+  verdict: string;
+};
+export type PaperRun = {
+  id: string;
+  book: string;
+  name: string;
+  version: string;
+  version_name: string;
+  status: "active" | "stopped" | "mismatch";
+  balance_start: number;
+  equity: number;
+  risk_pct: number;
+  started_at: string;
+  first_day: string;
+  last_processed_at: string | null;
+  progress: PaperProgress;
+};
+export type PaperDay = {
+  day: string;
+  status: "trade" | "no_nr7" | "no_setup" | "no_fill" | "data_gap";
+  note: string;
+  direction: 1 | -1 | null;
+  entry: number | null;
+  exit: number | null;
+  stop: number | null;
+  reason: "sl" | "time" | null;
+  gross: number | null;
+  net: number | null;
+  net_bps: number | null;
+  net_spread: number | null;
+  lots: number | null;
+  pnl_usd: number | null;
+  entry_time: string | null;
+  exit_time: string | null;
+};
+export type PaperPlan = {
+  day: string;
+  active: boolean;
+  orders: { direction: 1 | -1; entry: number; stop: number; valid_until: string | null; flat_by: string }[];
+};
+export type PaperOverview = {
+  versions: PaperVersion[];
+  runs: PaperRun[];
+  provider: string | null;
+  bars_available: boolean;
+  last_bar: string | null;
+  max_risk_pct: number;
+};
 
 // null = wszystkie rachunki; "" to też rachunek (import z plików bez nazwy)
 const bq = (book: string | null) => (book === null ? "" : `?book=${encodeURIComponent(book)}`);
@@ -407,6 +476,10 @@ export const api = {
   saveAiKey: (body: { api_key?: string; model: string }) => send<{ ok: boolean; last4: string; model: string; provider: AiProvider }>("PUT", "/api/ai/key", body),
   deleteAiKey: () => send<{ ok: boolean }>("DELETE", "/api/ai/key"),
   brief: () => get<BriefResponse>("/api/brief"),
+  paper: () => get<PaperOverview>("/api/paper"),
+  paperRun: (id: string) => get<PaperRun & { days: PaperDay[]; today: PaperPlan | null }>(`/api/paper/runs/${id}`),
+  createPaperRun: (body: { version: string; name: string; balance: number; risk_pct: number }) => send<PaperRun>("POST", "/api/paper/runs", body),
+  stopPaperRun: (id: string) => send<PaperRun>("POST", `/api/paper/runs/${id}/stop`),
   generateBrief: () => send<Brief>("POST", "/api/brief/generate"),
   saveBriefSubscription: (body: { enabled: boolean; discord_webhook?: string }) => send<BriefSubscription>("PUT", "/api/brief/subscription", body),
   telegramLink: () => send<{ url: string; expires_in: number }>("POST", "/api/brief/telegram/link"),

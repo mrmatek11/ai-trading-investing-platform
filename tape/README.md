@@ -36,6 +36,7 @@ research: [`../docs/RESEARCH.md`](../docs/RESEARCH.md).
 | Reguły prop firm | ✅ dzienny limit, drawdown statyczny / trailing, symulacja tej samej historii na 3 typach kont |
 | Logowanie (Clerk / OIDC) | ✅ JWT weryfikowany po JWKS, konto tylko z tokenu, izolacja danych; włączane zmiennymi środowiskowymi |
 | Logowanie przez Discord | ✅ OAuth2 (zakres `identify`), `state` przeciw CSRF, własna sesja w ciasteczku HttpOnly/Secure/SameSite=Lax (30 dni), zmiany danych tylko z nagłówkiem Origin aplikacji; konto `discord:<id>`; działa obok Clerk |
+| Paper trading | ✅ zamrożone wersje strategii (parametry + SHA-256 silnika; zmiana kodu zatrzymuje przebiegi) na świecach M15 bid z OANDA; silnik zgodny z badaniem transakcja po transakcji (323/323); tylko do przodu; postęp wobec karty zamrożenia (≥ 100 transakcji, t ≥ 1,65 po koszcie 0,40 USD/oz); ryzyko 0,1–2%; transakcje jako osobny rachunek `paper:…` poza „wszystkimi kontami”; worker `python -m tape.paper --every 300` |
 | Płatności | ⏳ wymagają konta Paddle |
 
 ## Uruchomienie
@@ -88,7 +89,7 @@ Zmienne środowiskowe:
 | `TAPE_DISCORD_CLIENT_ID`, `TAPE_DISCORD_CLIENT_SECRET`, `TAPE_SESSION_SECRET`, `TAPE_APP_URL` | logowanie przez Discord; w Discord Developer Portal dodaj Redirect `<TAPE_APP_URL>/api/auth/discord/callback` |
 | `VITE_CLERK_PUBLISHABLE_KEY` | frontend: klucz publiczny Clerk; bez niego aplikacja działa bez logowania |
 | `TAPE_SECRET_KEYS` | klucze szyfrowania tokenów brokerów, `id:base64(32 B)`, pierwszy aktywny; bez nich połączenie IBKR jest wyłączone |
-| `TAPE_PRICE_PROVIDER` | `twelvedata` (+ `TWELVEDATA_API_KEY`), `oanda` (+ `OANDA_TOKEN`, `OANDA_ENV=practice`) albo `goldapi`; worker: `python -m tape.market --every 300 --backfill 2000` |
+| `TAPE_PRICE_PROVIDER` | `twelvedata` (+ `TWELVEDATA_API_KEY`), `oanda` (+ `OANDA_TOKEN`, `OANDA_ENV=practice`) albo `goldapi`; worker: `python -m tape.market --every 300 --backfill 2000`. Paper trading potrzebuje świec M15: `oanda` (strona bid + spread) albo `twelvedata`; `goldapi` ich nie ma |
 | `TAPE_SMTP_HOST`, `TAPE_SMTP_PORT`, `TAPE_SMTP_USER`, `TAPE_SMTP_PASSWORD`, `TAPE_MAIL_FROM` | wysyłka e-maili (STARTTLS); bez nich worker `tape.reports` tylko loguje |
 | `TAPE_AI_REQUIRE_USER_KEY` | `1` = funkcje AI tylko na kluczach użytkowników (serwer nie płaci za cudze zapytania) |
 | `ANTHROPIC_API_KEY` / `DEEPSEEK_API_KEY` | AI serwera: brief, klasyfikator newsów, fallback dla użytkowników bez klucza; bez kluczy działają fallbacki |

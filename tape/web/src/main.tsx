@@ -9,6 +9,7 @@ import { BriefPage } from "./pages/Brief";
 import { ConnectionsPage } from "./pages/Connections";
 import { Dashboard } from "./pages/Dashboard";
 import { ImportPage } from "./pages/Import";
+import { PaperPage } from "./pages/Paper";
 import { Playbooks } from "./pages/Playbooks";
 import { PortfolioPage } from "./pages/Portfolio";
 import { RiskPage } from "./pages/Risk";
@@ -24,6 +25,7 @@ const routeTree = root.addChildren([
   // Wykres transakcji (lightweight-charts) też osobno — lista i dashboard ładują się szybciej.
   createRoute({ getParentRoute: () => root, path: "/trades/$key", component: lazyRouteComponent(() => import("./pages/TradeDetail"), "TradeDetail") }),
   createRoute({ getParentRoute: () => root, path: "/playbooks", component: Playbooks }),
+  createRoute({ getParentRoute: () => root, path: "/paper", component: PaperPage }),
   createRoute({ getParentRoute: () => root, path: "/portfolio", component: PortfolioPage }),
   // Globus (three.js) ładowany osobno — journal nie czeka na ~2 MB grafiki 3D.
   createRoute({ getParentRoute: () => root, path: "/globe", component: lazyRouteComponent(() => import("./pages/Globe"), "GlobePage") }),

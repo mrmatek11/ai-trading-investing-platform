@@ -69,6 +69,18 @@ and to **Discord** webhooks. No buy/sell calls — it explains what is at stake 
 - **News pipeline** — headlines clustered into events, classified by channel (safe haven, real yields, USD, central-bank demand…),
   quotes validated against the source; bias snapshots are logged append-only and scored against later prices.
 
+### 🧪 Paper trading — the frozen strategy on live prices
+A strategy only touches real money after it survives a period it has never seen. GoldTape runs **frozen** strategy
+versions on live M15 bid candles (OANDA demo): stop orders, OCO, stop-loss and time exit exactly as in the research.
+- **Frozen means frozen:** a version is its parameters plus the SHA-256 of the engine file. If the code changes, running
+  tests stop as "mismatch" and a new version starts from zero — no quietly tuned bot that only *looks* like the one you tested.
+- **Proven equal to the research:** the engine reproduces the backtest trade for trade (323 of 323 trades, zero differences).
+- **Forward only:** a run trades only days after it starts. There is no "replay history" button to rerun until it looks good.
+- **Progress against the pre-registered test:** trades out of 100 and t-stat against 1.65 on the per-ounce result after the
+  study's 0.40 USD/oz cost — not the USD equity curve.
+- **Risk cap:** 0.1–2 % per trade, sized down to 0.01 lot. Paper trades land in the journal as their own account, kept
+  out of "all accounts" so they never mix with real trading.
+
 ### 🔌 Claude Code & Claude Desktop (MCP)
 GoldTape is an **MCP server**. Create a personal token in *Settings* and plug your journal into Claude:
 
@@ -120,7 +132,7 @@ flowchart LR
 | AI | Anthropic structured outputs with prompt caching and server-side fallback · DeepSeek JSON mode · MCP (Streamable HTTP) |
 | Auth | Sign in with Discord (OAuth2 + HttpOnly session + CSRF origin check) or any OIDC/Clerk JWT |
 | Security | AES-256-GCM envelope encryption for secrets, hashed push/MCP tokens, `defusedxml` for all XML, per-account isolation tests |
-| Ops | Docker Compose: `db`, `api`, `web` (nginx + gzip), `sync`, `reports`, `brief` + optional `prices`, `calendar`, `news` |
+| Ops | Docker Compose: `db`, `api`, `web` (nginx + gzip), `sync`, `reports`, `brief` + optional `prices`, `calendar`, `paper`, `news` |
 
 ### Quick start
 
@@ -146,6 +158,7 @@ Useful switches in `tape/.env` (full list in [`tape/README.md`](tape/README.md))
 | Server AI (brief, news) | `ANTHROPIC_API_KEY` or `DEEPSEEK_API_KEY` |
 | Telegram brief | `TAPE_TELEGRAM_BOT_TOKEN`, `TAPE_TELEGRAM_BOT_USERNAME`, optional `TAPE_TELEGRAM_CHAT_ID` |
 | Live prices | `TAPE_PRICE_PROVIDER` = `twelvedata` / `oanda` / `goldapi` |
+| Paper trading | `TAPE_PRICE_PROVIDER=oanda` + `OANDA_TOKEN` (demo account), then `docker compose --profile prices up -d` |
 | E-mail reports | `TAPE_SMTP_*`, `TAPE_MAIL_FROM` |
 
 ### Performance
@@ -180,7 +193,7 @@ Full write-up in [docs/BACKTEST_RESULTS.md](docs/BACKTEST_RESULTS.md).
 
 ## Quality
 
-- **152 GoldTape backend tests** (SQLite + PostgreSQL in CI) and **39 bot tests**: position engine, importers, encryption,
+- **166 GoldTape backend tests** (SQLite + PostgreSQL in CI) and **39 bot tests**: position engine, importers, encryption,
   auth/CSRF, account isolation, AI fact validation, Telegram/Discord delivery, MCP protocol, RSS parsing (incl. XML entity attacks).
 - Protections are **mutation-tested**: removing an isolation check, the OAuth `state` check or the number validator makes a test fail.
 - Optimised code paths are checked against brute-force reference implementations.
@@ -191,7 +204,9 @@ Full write-up in [docs/BACKTEST_RESULTS.md](docs/BACKTEST_RESULTS.md).
 - [ ] Payments (Paddle) and plans
 - [x] Rate limiting on public endpoints (MT5 ingest, MCP, Discord login)
 - [ ] More AI providers (OpenAI-compatible endpoints)
-- [ ] Forward (paper) test of the London ORB candidate on data it has never seen
+- [x] Paper-trading desk for frozen strategy versions (forward-only, live bid candles)
+- [ ] Complete the forward test of the London ORB candidate (≥ 100 trades)
+- [ ] Live intraday position view in paper trading; real order execution only for versions that pass
 
 ## Disclaimer
 

@@ -56,6 +56,9 @@ class Base(DeclarativeBase):
     pass
 
 
+PAPER_PREFIX = "paper:"          # rachunki paper tradingu — poza agregatami „wszystkie rachunki”
+
+
 def fill_id(source: str, book: str, external_id: str) -> str:
     """Identyfikator fill-a w silniku pozycji. Klucz pozycji to hash pierwszego z nich — zmiana formatu
     odpięłaby notatki z journala od transakcji, dlatego format jest tylko tutaj."""
@@ -121,6 +124,7 @@ def import_models() -> None:
     """Zaimportuj wszystkie moduły z tabelami, żeby były w Base.metadata."""
     from . import ai_keys, brief, econ_calendar, journal, market, mcp_server, prop_accounts, reports, review, sync  # noqa: F401
     from .news import store  # noqa: F401
+    from .paper import store as _paper  # noqa: F401
 
 
 def migrate(url: str) -> None:
@@ -185,6 +189,8 @@ def load_cash_flows(session: Session, account: str, book: Optional[str] = None) 
     q = select(CashFlowRow).where(CashFlowRow.account == account)
     if book is not None:
         q = q.where(CashFlowRow.book == book)
+    else:
+        q = q.where(~CashFlowRow.book.startswith(PAPER_PREFIX, autoescape=True))   # paper tylko po jawnym wyborze
     return list(session.scalars(q.order_by(CashFlowRow.ts)))
 
 
@@ -198,6 +204,8 @@ def load_fills_by_book(session: Session, account: str = "default", book: Optiona
                F.fee, F.broker_pnl, F.stop_loss, F.currency).where(F.account == account)
     if book is not None:
         q = q.where(F.book == book)
+    else:
+        q = q.where(~F.book.startswith(PAPER_PREFIX, autoescape=True))   # paper tylko po jawnym wyborze rachunku
     out: Dict[str, List[Fill]] = {}
     for (b, source, ext, ts, symbol, side, qty, price, size, fee, pnl, sl, cur) in session.execute(q.order_by(F.ts, F.id)):
         out.setdefault(b, []).append(Fill(external_id=fill_id(source, b, ext), ts=ts, symbol=symbol, side=side, qty=qty,
@@ -211,4 +219,6 @@ def load_fills(session: Session, account: str = "default", book: Optional[str] =
 
 
 def books(session: Session, account: str) -> List[str]:
-    return sorted(set(session.scalars(select(FillRow.book).where(FillRow.account == account).distinct())))
+    """Prawdziwe rachunki (bez paper — te pokazujemy osobno z tabeli przebiegów)."""
+    return sorted(set(session.scalars(select(FillRow.book).where(
+        FillRow.account == account, ~FillRow.book.startswith(PAPER_PREFIX, autoescape=True)).distinct())))
