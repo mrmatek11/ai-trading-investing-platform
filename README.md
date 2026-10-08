@@ -149,6 +149,8 @@ cd tape/backend && pip install -e ".[dev]" && uvicorn tape.api:create_app --fact
 cd tape/web && npm install && npm run dev   # → http://localhost:5173
 ```
 
+Step-by-step guide in Polish — local vs. VPS, OANDA, Telegram, https, backups: [`docs/URUCHOMIENIE.md`](docs/URUCHOMIENIE.md).
+
 Useful switches in `tape/.env` (full list in [`tape/README.md`](tape/README.md)):
 
 | Feature | Variables |
