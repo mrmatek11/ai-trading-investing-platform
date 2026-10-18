@@ -96,6 +96,7 @@ Zmienne środowiskowe:
 | `TAPE_RSS_FEEDS` | kanały RSS: `nazwa\|https://adres\|filtr;…` (puste = domyślne) |
 | `TAPE_BRIEF_TIME`, `TAPE_BRIEF_TZ` | godzina briefu (domyślnie 07:30, Europe/Warsaw); worker `python -m tape.brief --every 60` |
 | `TAPE_TELEGRAM_BOT_TOKEN`, `TAPE_TELEGRAM_BOT_USERNAME` | bot Telegram (@BotFather); `TAPE_TELEGRAM_CHAT_ID` — opcjonalny kanał publiczny, `TAPE_TELEGRAM_CHANNEL_URL` — link do niego |
+| `TAPE_ALLOW_OPEN` | publiczny `TAPE_APP_URL` bez logowania (Discord/OIDC albo `TAPE_API_TOKEN`) = API odmawia startu; `1` wyłącza kontrolę (np. dostęp tylko przez VPN) |
 | `TAPE_RATE_LIMIT`, `TAPE_TRUST_PROXY` | limit zapytań (token bucket na IP) dla ingestu MT5, MCP i logowania Discord: domyślnie włączony, odpowiedź 429 z `Retry-After`. `TAPE_TRUST_PROXY` = liczba naszych proxy przed API: `1` (compose) = sam nginx z obrazu `web`; każde dodatkowe proxy przed nim (terminator TLS, Cloudflare, load balancer) dodaje 1, inaczej wszyscy klienci trafią do jednego limitu. Limit liczony w pamięci procesu (przy N workerach efektywnie ×N) |
 
 ## Stack

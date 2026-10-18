@@ -106,3 +106,29 @@ def test_users_are_isolated_and_account_param_is_ignored(tmp_path, verify, monke
     admin = {"Authorization": f"Bearer {token('admin_1')}"}
     prices = {"file": ("p.csv", io.BytesIO(b"timestamp,close\n2026-01-01 00:00:00,2600\n"), "text/csv")}
     assert c.post("/api/prices", headers=admin, files=prices).json()["added"] == 1
+
+
+def test_public_url_without_any_login_refuses_to_start(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    from tape.api import create_app
+    from tape.auth import open_exposure_problem
+
+    for app_url, multi, tok, allow, bad in [
+        ("https://goldtape.example.com", False, "", False, True),       # publiczny adres, brak logowania
+        ("https://goldtape.example.com", False, "tajny-token", False, False),
+        ("https://goldtape.example.com", True, "", False, False),       # Discord / OIDC
+        ("https://goldtape.example.com", False, "", True, False),       # świadomie otwarte (np. VPN)
+        ("http://localhost:5173", False, "", False, False),
+        ("http://127.0.0.1:8080", False, "", False, False),
+        ("", False, "", False, False),
+    ]:
+        assert bool(open_exposure_problem(app_url, multi, tok, allow)) is bad, (app_url, multi, tok, allow)
+
+    url = f"sqlite:///{tmp_path / 'e.db'}"
+    monkeypatch.setenv("TAPE_APP_URL", "https://goldtape.example.com")
+    monkeypatch.delenv("TAPE_API_TOKEN", raising=False)
+    monkeypatch.delenv("TAPE_ALLOW_OPEN", raising=False)
+    with pytest.raises(RuntimeError, match="nie ma żadnego logowania"):
+        create_app(url)
+    monkeypatch.setenv("TAPE_API_TOKEN", "tajny-token")
+    assert TestClient(create_app(url)).get("/api/health").status_code == 200

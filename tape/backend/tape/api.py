@@ -29,7 +29,7 @@ from . import mcp_server
 from . import discord_auth, ratelimit
 from . import review as ai_review
 from . import sync as broker_sync
-from .auth import AuthError, Verifier, admin_subs, verifier_from_env
+from .auth import AuthError, Verifier, admin_subs, open_exposure_problem, verifier_from_env
 from .db import (CashFlowRow, ImportRow, books as list_books, load_cash_flows, load_fills, make_sessionmaker, store_cash_flows, store_fills)
 from .engine import analytics, portfolio, prop, risk, stats
 from .importers import BROKERS, generic, parse_file
@@ -187,6 +187,10 @@ def create_app(database_url: Optional[str] = None, ai_client=None, verifier: Opt
     sessions = discord_auth.Sessions(dcfg.session_secret) if dcfg else None
     dhttp = discord_http or discord_auth.default_http
     multi_user = verify is not None or dcfg is not None
+    problem = open_exposure_problem(os.getenv("TAPE_APP_URL", ""), multi_user, token,
+                                    os.getenv("TAPE_ALLOW_OPEN", "").strip() in ("1", "true", "yes"))
+    if problem:
+        raise RuntimeError(problem)               # lepiej nie wystartować niż wystawić cudze dane każdemu
 
     async def auth(request: Request):
         # Konto zawsze z uwierzytelnienia, nigdy z parametrów żądania.

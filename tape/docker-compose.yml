@@ -56,6 +56,7 @@ services:
       # Liczba proxy przed API (do limitu zapytań): 1 = nginx z obrazu web. API nie ma portu na zewnątrz.
       # Z terminatorem TLS / Cloudflare przed nginx ustaw TAPE_TRUST_PROXY=2.
       TAPE_TRUST_PROXY: ${TAPE_TRUST_PROXY:-1}
+      TAPE_ALLOW_OPEN: ${TAPE_ALLOW_OPEN:-}
       TAPE_RATE_LIMIT: ${TAPE_RATE_LIMIT:-1}
     depends_on:
       db:

@@ -149,6 +149,9 @@ cd tape/backend && pip install -e ".[dev]" && uvicorn tape.api:create_app --fact
 cd tape/web && npm install && npm run dev   # → http://localhost:5173
 ```
 
+> **Self-hosting:** turn on login (Discord/OIDC or `TAPE_API_TOKEN`) before exposing it to the internet — with a public
+> `TAPE_APP_URL` and no login the API refuses to start. What is verified and what is not: [SECURITY.md](SECURITY.md).
+
 Step-by-step guide in Polish — local vs. VPS, OANDA, Telegram, https, backups: [`docs/URUCHOMIENIE.md`](docs/URUCHOMIENIE.md).
 
 Useful switches in `tape/.env` (full list in [`tape/README.md`](tape/README.md)):

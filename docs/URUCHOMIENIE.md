@@ -79,6 +79,7 @@ W aplikacji: **Ustawienia → Twój klucz AI** (Claude albo DeepSeek). Klucz jes
 4. **Logowanie jest obowiązkowe, gdy aplikacja jest w internecie.** Najprościej logowanie przez Discord:
    `TAPE_DISCORD_CLIENT_ID`, `TAPE_DISCORD_CLIENT_SECRET`, `TAPE_SESSION_SECRET` (opis w `tape/README.md`).
    Bez tego każdy, kto zna adres, widziałby Twój journal.
+   Aplikacja pilnuje tego sama: z publicznym `TAPE_APP_URL` i bez logowania nie wystartuje (komunikat wskaże, co ustawić).
 5. Certyfikat https — Caddy przed aplikacją (`/etc/caddy/Caddyfile`):
    ```
    goldtape.twojadomena.pl {

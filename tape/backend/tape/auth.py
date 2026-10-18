@@ -78,3 +78,19 @@ def verifier_from_env() -> Optional[JwksVerifier]:
 
 def admin_subs() -> tuple:
     return _csv("TAPE_ADMIN_SUBS")
+
+
+def open_exposure_problem(app_url: str, multi_user: bool, api_token: str, allow_open: bool = False) -> str:
+    """Pusty napis = w porządku. Inaczej opis błędu konfiguracji: publiczny adres aplikacji bez żadnego logowania.
+
+    Tryb jednego użytkownika bez tokenu jest wygodny lokalnie, ale pod publicznym adresem oznacza, że każdy, kto go
+    zna, widzi journal. Adres localhost / 127.0.0.1 uznajemy za lokalny; TAPE_ALLOW_OPEN=1 wyłącza kontrolę
+    (np. aplikacja dostępna tylko przez VPN, który sam ją chroni)."""
+    url = (app_url or "").strip().lower()
+    local = url.startswith(("http://localhost", "http://127.0.0.1", "http://[::1]"))
+    if not url or local or multi_user or api_token or allow_open:
+        return ""
+    return ("TAPE_APP_URL wskazuje publiczny adres, a nie ma żadnego logowania — każdy, kto go zna, zobaczyłby Twoje dane. "
+            "Włącz logowanie przez Discord (TAPE_DISCORD_CLIENT_ID/SECRET, TAPE_SESSION_SECRET) albo OIDC, "
+            "albo ustaw TAPE_API_TOKEN. Jeśli aplikacja jest chroniona inaczej (np. tylko przez VPN), ustaw TAPE_ALLOW_OPEN=1.")
+
