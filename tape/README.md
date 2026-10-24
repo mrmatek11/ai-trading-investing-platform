@@ -58,7 +58,7 @@ npm run build                                            # typecheck + build pro
 cd tape/backend
 python -m tape.news.pipeline --every 900
 # synchronizacja kont IBKR (np. co godzinę); wymaga TAPE_SECRET_KEYS
-python -m tape.sync --every 3600
+python -m tape sync --every 3600
 # ceny do liczenia trafności (CSV: timestamp, close)
 curl -F file=@xauusd_h1.csv -F asset=XAU http://127.0.0.1:8000/api/prices
 ```
@@ -89,12 +89,12 @@ Zmienne środowiskowe:
 | `TAPE_DISCORD_CLIENT_ID`, `TAPE_DISCORD_CLIENT_SECRET`, `TAPE_SESSION_SECRET`, `TAPE_APP_URL` | logowanie przez Discord; w Discord Developer Portal dodaj Redirect `<TAPE_APP_URL>/api/auth/discord/callback` |
 | `VITE_CLERK_PUBLISHABLE_KEY` | frontend: klucz publiczny Clerk; bez niego aplikacja działa bez logowania |
 | `TAPE_SECRET_KEYS` | klucze szyfrowania tokenów brokerów, `id:base64(32 B)`, pierwszy aktywny; bez nich połączenie IBKR jest wyłączone |
-| `TAPE_PRICE_PROVIDER` | `twelvedata` (+ `TWELVEDATA_API_KEY`), `oanda` (+ `OANDA_TOKEN`, `OANDA_ENV=practice`) albo `goldapi`; worker: `python -m tape.market --every 300 --backfill 2000`. Paper trading potrzebuje świec M15: `oanda` (strona bid + spread) albo `twelvedata`; `goldapi` ich nie ma |
+| `TAPE_PRICE_PROVIDER` | `twelvedata` (+ `TWELVEDATA_API_KEY`), `oanda` (+ `OANDA_TOKEN`, `OANDA_ENV=practice`) albo `goldapi`; worker: `python -m tape market --every 300 --backfill 2000`. Paper trading potrzebuje świec M15: `oanda` (strona bid + spread) albo `twelvedata`; `goldapi` ich nie ma |
 | `TAPE_SMTP_HOST`, `TAPE_SMTP_PORT`, `TAPE_SMTP_USER`, `TAPE_SMTP_PASSWORD`, `TAPE_MAIL_FROM` | wysyłka e-maili (STARTTLS); bez nich worker `tape.reports` tylko loguje |
 | `TAPE_AI_REQUIRE_USER_KEY` | `1` = funkcje AI tylko na kluczach użytkowników (serwer nie płaci za cudze zapytania) |
 | `ANTHROPIC_API_KEY` / `DEEPSEEK_API_KEY` | AI serwera: brief, klasyfikator newsów, fallback dla użytkowników bez klucza; bez kluczy działają fallbacki |
 | `TAPE_RSS_FEEDS` | kanały RSS: `nazwa\|https://adres\|filtr;…` (puste = domyślne) |
-| `TAPE_BRIEF_TIME`, `TAPE_BRIEF_TZ` | godzina briefu (domyślnie 07:30, Europe/Warsaw); worker `python -m tape.brief --every 60` |
+| `TAPE_BRIEF_TIME`, `TAPE_BRIEF_TZ` | godzina briefu (domyślnie 07:30, Europe/Warsaw); worker `python -m tape brief --every 60` |
 | `TAPE_TELEGRAM_BOT_TOKEN`, `TAPE_TELEGRAM_BOT_USERNAME` | bot Telegram (@BotFather); `TAPE_TELEGRAM_CHAT_ID` — opcjonalny kanał publiczny, `TAPE_TELEGRAM_CHANNEL_URL` — link do niego |
 | `TAPE_ALLOW_OPEN` | publiczny `TAPE_APP_URL` bez logowania (Discord/OIDC albo `TAPE_API_TOKEN`) = API odmawia startu; `1` wyłącza kontrolę (np. dostęp tylko przez VPN) |
 | `TAPE_RATE_LIMIT`, `TAPE_TRUST_PROXY` | limit zapytań (token bucket na IP) dla ingestu MT5, MCP i logowania Discord: domyślnie włączony, odpowiedź 429 z `Retry-After`. `TAPE_TRUST_PROXY` = liczba naszych proxy przed API: `1` (compose) = sam nginx z obrazu `web`; każde dodatkowe proxy przed nim (terminator TLS, Cloudflare, load balancer) dodaje 1, inaczej wszyscy klienci trafią do jednego limitu. Limit liczony w pamięci procesu (przy N workerach efektywnie ×N) |

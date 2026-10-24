@@ -7,7 +7,7 @@
   produkcją sprawdzić warunki użycia albo wybrać licencjonowanego dostawcę.
 - csv — wgranie przez administratora (kolumny: time [UTC], country, title, impact).
 
-Worker:  python -m tape.econ_calendar --every 21600
+Worker:  python -m tape econ_calendar --every 21600
 """
 
 from __future__ import annotations
@@ -178,7 +178,3 @@ def main(argv=None):
         if args.once:
             break
         time.sleep(args.every)
-
-
-if __name__ == "__main__":
-    main()
