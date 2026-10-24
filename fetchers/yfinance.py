@@ -44,9 +44,7 @@ Użycie:
 
 import time
 import pandas as pd
-import numpy as np
-from datetime import datetime, timezone, timedelta
-from typing import Optional, Dict, List
+from typing import Optional
 from collections import OrderedDict
 
 

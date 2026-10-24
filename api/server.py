@@ -26,7 +26,7 @@ Uzycie:
 import hmac
 import logging
 import os
-from typing import Dict, List, Optional, Any
+from typing import Dict, Any
 from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)

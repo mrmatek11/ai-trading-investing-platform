@@ -26,13 +26,11 @@ Hierarchia sygnałów (od najsilniejszego):
   🟡 STOCH-ONLY   → Stoch zone signal (K wchodzi/wychodzi z OB/OS, brak NWO/CVD)
 """
 
-import math
 import pandas as pd
-import numpy as np
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import List, Optional, Dict
 
-from strategy.signal_detector import Signal, price_precision, round_price
+from strategy.signal_detector import Signal, round_price
 from strategy.neural_weight_oscillator import NeuralWeightOscillator, NWOConfig, calc_atr, ema
 
 # Global sentiment engine (lazy init)

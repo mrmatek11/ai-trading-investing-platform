@@ -19,7 +19,7 @@ import os as _os
 import time as _time
 import logging as _logging
 from typing import Optional, Dict, List, Tuple
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from collections import deque
 
 _nwo_logger = _logging.getLogger(__name__)

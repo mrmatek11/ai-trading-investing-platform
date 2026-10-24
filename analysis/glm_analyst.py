@@ -14,15 +14,13 @@ Używa: Zhipu AI ChatGLM API (https://open.bigmodel.cn)
 Instalacja: pip install requests pyjwt
 """
 
-import os
 import time
 import json
 import logging
-import hashlib
 import random
 from datetime import datetime, timezone, timedelta
-from typing import Optional, Dict, List, Any, Tuple
-from dataclasses import dataclass, field
+from typing import Optional, Dict, List
+from dataclasses import dataclass
 from collections import OrderedDict
 
 import requests

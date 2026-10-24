@@ -26,12 +26,11 @@ import os
 import time
 import json
 import logging
-import requests as _requests
+import requests
 import hashlib
-from datetime import datetime, timezone, timedelta
-from typing import Dict, List, Optional, Tuple
+from datetime import datetime, timezone
+from typing import Dict, List, Tuple
 from dataclasses import dataclass, field
-from collections import OrderedDict
 
 logger = logging.getLogger(__name__)
 
@@ -327,7 +326,7 @@ Respond ONLY with valid JSON (no markdown):
 {{"score": <-1.0 to 1.0>, "confidence": <0.0 to 1.0>, "summary": "<one sentence>"}}"""
         
         try:
-            response = _requests.post(
+            response = requests.post(
                 self.GLM_API_URL,
                 headers={
                     "Authorization": f"Bearer {self._api_key}",

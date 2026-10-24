@@ -5,7 +5,6 @@ Piękne embedy z kolorami, ikonami i formatowaniem.
 """
 
 import requests
-import json
 import logging
 import time
 from datetime import datetime, timezone

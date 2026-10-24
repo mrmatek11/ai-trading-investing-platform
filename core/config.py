@@ -229,7 +229,7 @@ class BotConfig:
             errors.append("discord_webhook_url jest wymagany!")
         elif not self.discord_webhook_url.startswith("https://discord.com/api/webhooks/") and \
            not self.discord_webhook_url.startswith("https://discordapp.com/api/webhooks/"):
-            errors.append(f"discord_webhook_url nie wyglada na prawidlowy webhook Discord")
+            errors.append("discord_webhook_url nie wyglada na prawidlowy webhook Discord")
         if self.scan_interval < 10:
             errors.append("scan_interval musi byc >= 10 sekund")
         if not self.symbols:

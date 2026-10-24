@@ -23,14 +23,11 @@ Użycie:
   stats = tracker.get_stats()
 """
 
-import os
 import sqlite3
-import time
-import json
 import threading
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Tuple
-from dataclasses import dataclass, field, asdict
+from typing import Dict, List, Optional
+from dataclasses import dataclass
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

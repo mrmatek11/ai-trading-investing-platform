@@ -34,7 +34,7 @@ import logging
 import hashlib
 from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional, Tuple
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
@@ -1209,31 +1209,31 @@ if __name__ == "__main__":
 
     # Statystyki
     stats = cal.stats
-    print(f"\n📊 Statystyki:")
+    print("\n📊 Statystyki:")
     for k, v in stats.items():
         print(f"  {k}: {v}")
 
     # Nadchodzace wydarzenia (7 dni)
-    print(f"\n📅 Nadchodzace wydarzenia (7 dni):")
+    print("\n📅 Nadchodzace wydarzenia (7 dni):")
     events = cal.get_all_events(days_ahead=7)
     for ev in events[:20]:
         time_str = ev.format_time_until()
         print(f"  {ev.impact_emoji} {ev.country_flag} {ev.date} {ev.time} — {ev.name} ({time_str})")
 
     # Alerty
-    print(f"\n🔔 Alerty:")
+    print("\n🔔 Alerty:")
     alerts = cal.check_upcoming()
     for alert_level, event in alerts:
         print(f"  [{alert_level.upper()}] {event.name} ({event.country}) — {event.format_time_until()}")
 
     # Tygodniowy kalendarz
-    print(f"\n📋 Tygodniowy kalendarz (Discord embed):")
+    print("\n📋 Tygodniowy kalendarz (Discord embed):")
     weekly = cal.format_weekly_calendar_discord()
     if weekly:
         print(json.dumps(weekly, indent=2, ensure_ascii=False))
 
     # Dzienny podglad
-    print(f"\n📋 Dzienny podglad (Discord embed):")
+    print("\n📋 Dzienny podglad (Discord embed):")
     daily = cal.format_daily_preview_discord()
     if daily:
         print(json.dumps(daily, indent=2, ensure_ascii=False))
@@ -1241,13 +1241,13 @@ if __name__ == "__main__":
         print("  Brak wydarzen na dzis")
 
     # Test NFP generatora
-    print(f"\n📅 NFP daty 2025:")
+    print("\n📅 NFP daty 2025:")
     nfp_dates = generate_nfp_dates(2025)
     for d in nfp_dates:
         print(f"  {d}")
 
     # Test dodania custom eventa
-    print(f"\n➕ Dodaje custom event...")
+    print("\n➕ Dodaje custom event...")
     custom_ev = EconomicEvent(
         name="BTC ETF Decision",
         country="US",
@@ -1263,7 +1263,7 @@ if __name__ == "__main__":
 
     # Formatuj jako Discord embed
     embed = cal.format_event_discord("warning", custom_ev)
-    print(f"\n📋 Discord embed dla custom event:")
+    print("\n📋 Discord embed dla custom event:")
     print(json.dumps(embed, indent=2, ensure_ascii=False))
 
     print("\n" + "=" * 70)

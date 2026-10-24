@@ -29,7 +29,7 @@ import logging
 import requests
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 

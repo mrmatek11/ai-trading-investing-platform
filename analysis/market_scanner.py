@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional, Tuple
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from collections import OrderedDict
 
 logger = logging.getLogger(__name__)

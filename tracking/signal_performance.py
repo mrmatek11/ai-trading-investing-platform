@@ -20,11 +20,10 @@ Uzycie:
 
 import sqlite3
 import time
-import json
 import logging
 from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional, Tuple
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
