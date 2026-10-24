@@ -63,6 +63,54 @@ czyli około 3 lat. Każdy dzień z wyłączonym komputerem to dzień pominięty
 
 W aplikacji: **Ustawienia → Twój klucz AI** (Claude albo DeepSeek). Klucz jest szyfrowany kluczem z `TAPE_SECRET_KEYS`.
 
+## Na VPS tylko do paper tradingu (bez domeny i logowania)
+
+Aplikacja słucha tylko na `127.0.0.1` serwera, więc z internetu jej nie widać. Ty wchodzisz przez tunel SSH,
+a workery (ceny, paper, plan dnia na Telegram) działają same 24/7. Cały stos zajmuje ok. 0,5 GB RAM,
+więc wystarczy VPS z 1 GB (z 2 GB jest zapas).
+
+1. Na VPS (Ubuntu/Debian):
+   ```bash
+   curl -fsSL https://get.docker.com | sh
+   git clone https://github.com/mrmatek11/ai-trading-investing-platform.git
+   cd ai-trading-investing-platform/tape
+   cp .env.example .env
+   sed -i "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$(openssl rand -hex 24)|; s|^TAPE_SECRET_KEYS=.*|TAPE_SECRET_KEYS=k1:$(openssl rand -base64 32)|" .env
+   ```
+2. W `.env` uzupełnij (`nano .env`), resztę zostaw pustą — zwłaszcza `TAPE_APP_URL`:
+   ```
+   TAPE_PRICE_PROVIDER=oanda
+   OANDA_TOKEN=twój-token-z-OANDA-demo
+   OANDA_ENV=practice
+   TAPE_TELEGRAM_BOT_TOKEN=token-od-BotFather
+   TAPE_TELEGRAM_BOT_USERNAME=nazwa_bota
+   ```
+   Zrób kopię `.env` u siebie (np. w menedżerze haseł): bez `TAPE_SECRET_KEYS` zapisane sekrety są nie do odczytania.
+3. Start (po restarcie serwera wstaje sam):
+   ```bash
+   docker compose --profile prices up -d --build
+   docker compose --profile prices ps                 # wszystko „Up”, api „healthy”
+   docker compose logs --tail 5 prices paper          # ceny: liczby świec, nie „błąd: …”
+   ```
+4. Na swoim komputerze (Windows PowerShell, macOS, Linux) otwórz tunel i zostaw okno otwarte:
+   ```bash
+   ssh -N -L 8080:127.0.0.1:8080 root@ADRES_IP_VPS
+   ```
+   i wejdź na **http://localhost:8080**. Tunel jest potrzebny tylko do oglądania — test działa bez niego.
+5. W aplikacji: **Brief dnia → Połącz z Telegramem** (Start w Telegramie), potem **Paper trading → Uruchom**
+   z zaznaczonym **„Wysyłaj plan dnia na Telegram/Discord”**. Pierwszy dzień przebiegu to następny dzień handlowy.
+6. Kopia bazy co noc — `crontab -e` i dopisz (w crontabie `%` trzeba poprzedzić `\`):
+   ```
+   0 3 * * * mkdir -p ~/backup && cd ~/ai-trading-investing-platform/tape && docker compose exec -T db pg_dump -U tape tape | gzip > ~/backup/goldtape-$(date +\%F).sql.gz
+   ```
+
+**Aktualizacje w trakcie testu:** `git pull && docker compose --profile prices up -d --build`. Jeśli zmiana dotknie
+silnika strategii (`tape/backend/tape/paper/engine.py`), przebieg zatrzyma się jako „mismatch” i test zacznie się od
+zera — to celowe. Przed `git pull` sprawdź: `git fetch && git diff --stat HEAD origin/main -- backend/tape/paper/engine.py`
+(pusto = bezpiecznie).
+
+Gdy zechcesz wejść z telefonu albo pod własną domeną — dalej, „Na serwerze (VPS)”.
+
 ## Na serwerze (VPS)
 
 1. Najmniejszy serwer z Ubuntu (2 vCPU, 4 GB RAM wystarczy) i domena, np. `goldtape.twojadomena.pl`
@@ -86,8 +134,7 @@ W aplikacji: **Ustawienia → Twój klucz AI** (Claude albo DeepSeek). Klucz jes
        reverse_proxy 127.0.0.1:8080
    }
    ```
-   W `tape/docker-compose.yml` zmień `"8080:80"` na `"127.0.0.1:8080:80"`, żeby port aplikacji nie był
-   dostępny z internetu z pominięciem Caddy.
+   Port aplikacji słucha tylko na `127.0.0.1`, więc z internetu da się wejść wyłącznie przez Caddy.
 6. `docker compose --profile prices up -d --build` — działa po restarcie serwera sam (`restart: unless-stopped`).
 7. Kopia zapasowa bazy (np. raz na dobę z crona):
    ```bash

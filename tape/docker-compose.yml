@@ -69,7 +69,7 @@ services:
       args:
         VITE_CLERK_PUBLISHABLE_KEY: ${VITE_CLERK_PUBLISHABLE_KEY:-}
     ports:
-      - "8080:80"
+      - "127.0.0.1:8080:80"   # tylko z tego komputera; z internetu przez Caddy albo tunel SSH
     depends_on:
       - api
     restart: unless-stopped
