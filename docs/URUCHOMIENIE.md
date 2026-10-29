@@ -97,6 +97,14 @@ więc wystarczy VPS z 1 GB (z 2 GB jest zapas).
    ssh -N -L 8080:127.0.0.1:8080 root@ADRES_IP_VPS
    ```
    i wejdź na **http://localhost:8080**. Tunel jest potrzebny tylko do oglądania — test działa bez niego.
+
+   **Masz Tailscale na VPS?** Zamiast tunelu, jednorazowo na serwerze:
+   ```bash
+   sudo tailscale serve --bg 8080
+   ```
+   i wchodzisz z każdego urządzenia w swojej sieci Tailscale (też z telefonu) na `https://<nazwa-vps>.<tailnet>.ts.net`.
+   Adres `http://100.x.y.z:8080` nie zadziała — port słucha tylko na `127.0.0.1`. Linki do aplikacji w wiadomościach
+   na Telegramie: `TAPE_APP_URL=https://<nazwa-vps>.<tailnet>.ts.net` i `TAPE_ALLOW_OPEN=1` (dostęp chroni Tailscale).
 5. W aplikacji: **Brief dnia → Połącz z Telegramem** (Start w Telegramie), potem **Paper trading → Uruchom**
    z zaznaczonym **„Wysyłaj plan dnia na Telegram/Discord”**. Pierwszy dzień przebiegu to następny dzień handlowy.
 6. Kopia bazy co noc — `crontab -e` i dopisz (w crontabie `%` trzeba poprzedzić `\`):
