@@ -6,8 +6,6 @@ Obsługuje wiele par i timeframe'ów z cache'owaniem.
 
 import time
 import pandas as pd
-import numpy as np
-from datetime import datetime, timezone
 from typing import Optional, Dict
 from collections import OrderedDict
 

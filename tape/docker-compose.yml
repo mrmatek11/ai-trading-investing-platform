@@ -69,15 +69,16 @@ services:
       args:
         VITE_CLERK_PUBLISHABLE_KEY: ${VITE_CLERK_PUBLISHABLE_KEY:-}
     ports:
-      - "8080:80"
+      - "127.0.0.1:8080:80"   # tylko z tego komputera; z internetu przez Caddy albo tunel SSH
     depends_on:
       - api
     restart: unless-stopped
 
   sync:
     build: ./backend
-    command: ["python", "-m", "tape.sync", "--every", "3600"]
+    command: ["python", "-m", "tape", "sync", "--every", "3600"]
     environment: *api-env
+    healthcheck: {disable: true}   # healthcheck z obrazu sprawdza API na :8000, którego worker nie ma
     depends_on:
       db:
         condition: service_healthy
@@ -85,8 +86,9 @@ services:
 
   reports:
     build: ./backend
-    command: ["python", "-m", "tape.reports", "--every", "300"]
+    command: ["python", "-m", "tape", "reports", "--every", "300"]
     environment: *api-env
+    healthcheck: {disable: true}   # healthcheck z obrazu sprawdza API na :8000, którego worker nie ma
     depends_on:
       db:
         condition: service_healthy
@@ -94,8 +96,9 @@ services:
 
   brief:
     build: ./backend
-    command: ["python", "-m", "tape.brief", "--every", "60"]
+    command: ["python", "-m", "tape", "brief", "--every", "60"]
     environment: *api-env
+    healthcheck: {disable: true}   # healthcheck z obrazu sprawdza API na :8000, którego worker nie ma
     depends_on:
       db:
         condition: service_healthy
@@ -103,8 +106,9 @@ services:
 
   prices:
     build: ./backend
-    command: ["python", "-m", "tape.market", "--every", "300", "--backfill", "2000"]
+    command: ["python", "-m", "tape", "market", "--every", "300", "--backfill", "2000"]
     environment: *api-env
+    healthcheck: {disable: true}   # healthcheck z obrazu sprawdza API na :8000, którego worker nie ma
     depends_on:
       db:
         condition: service_healthy
@@ -115,6 +119,7 @@ services:
     build: ./backend
     command: ["python", "-m", "tape.paper", "--every", "300"]
     environment: *api-env
+    healthcheck: {disable: true}   # healthcheck z obrazu sprawdza API na :8000, którego worker nie ma
     depends_on:
       db:
         condition: service_healthy
@@ -123,8 +128,9 @@ services:
 
   calendar:
     build: ./backend
-    command: ["python", "-m", "tape.econ_calendar", "--every", "21600"]
+    command: ["python", "-m", "tape", "econ_calendar", "--every", "21600"]
     environment: *api-env
+    healthcheck: {disable: true}   # healthcheck z obrazu sprawdza API na :8000, którego worker nie ma
     depends_on:
       db:
         condition: service_healthy
@@ -135,6 +141,7 @@ services:
     build: ./backend
     command: ["python", "-m", "tape.news.pipeline", "--every", "900"]
     environment: *api-env
+    healthcheck: {disable: true}   # healthcheck z obrazu sprawdza API na :8000, którego worker nie ma
     depends_on:
       db:
         condition: service_healthy

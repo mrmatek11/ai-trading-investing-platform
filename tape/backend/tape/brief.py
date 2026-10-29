@@ -18,7 +18,7 @@ Dostarczanie:
 - Discord: webhook użytkownika (zaszyfrowany SecretBoxem).
 
 Harmonogram: TAPE_BRIEF_TIME (domyślnie 07:30) w TAPE_BRIEF_TZ (Europe/Warsaw), poniedziałek–piątek.
-Worker:  python -m tape.brief --every 60
+Worker:  python -m tape brief --every 60
 """
 
 from __future__ import annotations
@@ -608,7 +608,3 @@ def main(argv=None):
         if args.once:
             break
         time.sleep(max(5, args.every))
-
-
-if __name__ == "__main__":
-    main()

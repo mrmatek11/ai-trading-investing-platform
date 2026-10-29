@@ -7,7 +7,7 @@ Główny focus: Stochastic (7,3,2) - oversold/overbought z crossover/crossunder.
 import math
 import pandas as pd
 import numpy as np
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional, Dict, List, Any
 from dataclasses import dataclass, field
 

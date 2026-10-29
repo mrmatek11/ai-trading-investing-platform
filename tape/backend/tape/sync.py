@@ -6,7 +6,7 @@
 Fill-e z synchronizacji trafiają do tych samych źródeł co import plików („ibkr”, „mt5”), więc ręczny import
 tego samego okresu nie tworzy duplikatów.
 
-Worker:  python -m tape.sync --every 3600
+Worker:  python -m tape sync --every 3600
 """
 
 from __future__ import annotations
@@ -264,7 +264,3 @@ def main(argv=None):
         if args.once:
             break
         time.sleep(min(args.every, 300))
-
-
-if __name__ == "__main__":
-    main()

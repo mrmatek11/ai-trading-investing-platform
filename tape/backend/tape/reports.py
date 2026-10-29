@@ -8,7 +8,7 @@
 Wysyłka przez SMTP (dowolny dostawca): TAPE_SMTP_HOST, TAPE_SMTP_PORT (587), TAPE_SMTP_USER,
 TAPE_SMTP_PASSWORD, TAPE_MAIL_FROM. Bez konfiguracji worker tylko loguje, co by wysłał.
 
-Worker:  python -m tape.reports --every 300
+Worker:  python -m tape reports --every 300
 """
 
 from __future__ import annotations
@@ -254,7 +254,3 @@ def main(argv=None):
         if args.once:
             break
         time.sleep(args.every)
-
-
-if __name__ == "__main__":
-    main()

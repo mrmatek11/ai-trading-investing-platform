@@ -27,13 +27,13 @@ import signal
 import argparse
 import logging
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Set
+from typing import Dict, List
 
 from core.config import BotConfig, config_aggressive, config_conservative, config_scalping, config_multi_asset
 from strategy.signal_detector import SignalDetector, Signal
 from fetchers.binance import DataFetcher
 from notifiers.discord import DiscordNotifier
-from strategy.custom_strategy import STRATEGY_REGISTRY, get_sentiment_engine
+from strategy.custom_strategy import STRATEGY_REGISTRY
 
 # --- Logging ---
 
@@ -822,8 +822,6 @@ class StochSignalBot:
                 pass
         return bars
 
-        return prices
-
     def _send_daily_briefing(self):
         """Generate and send GLM AI daily briefing."""
         if not self.glm_analyst or not self.notifier:
@@ -1206,7 +1204,7 @@ class StochSignalBot:
 
 def run_single_scan(config: BotConfig, test_mode: bool = True, strategy: str = "nwo_stoch_cvd"):
     """Uruchom pojedynczy skan i wyswietl wyniki (bez petli, bez Discord)."""
-    from strategy.custom_strategy import get_current_nwo_state, strategy_nwo_stoch_cvd, STRATEGY_REGISTRY
+    from strategy.custom_strategy import get_current_nwo_state, strategy_nwo_stoch_cvd
     import strategy.custom_strategy as custom_strategy
 
     # Te same ustawienia strategii co w petli bota (wczesniej --scan je ignorowal)
@@ -1546,7 +1544,7 @@ Przyklady:
         if config.use_api:
             try:
                 import threading
-                from api.server import create_api_app, run_api_server
+                from api.server import create_api_app
                 import uvicorn
 
                 app = create_api_app(bot)

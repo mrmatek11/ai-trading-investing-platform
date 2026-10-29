@@ -41,7 +41,7 @@ import os
 import sys
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field, replace
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Dict, Iterable, List, Optional, Sequence
 
 import numpy as np
 import pandas as pd

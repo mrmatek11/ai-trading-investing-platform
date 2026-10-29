@@ -32,8 +32,8 @@ import logging
 import numpy as np
 import pandas as pd
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Tuple
-from dataclasses import dataclass, field
+from typing import Dict, List, Optional
+from dataclasses import dataclass
 
 from fetchers.binance import DataFetcher
 

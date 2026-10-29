@@ -11,7 +11,7 @@ i ostatnią cenę do `quotes` (wycena portfela, pasek cen). Dostawcę wybiera TA
 ⚠️ Darmowe / demo plany służą do developmentu. Pokazywanie cen płacącym użytkownikom wymaga licencji
 dostawcy na redystrybucję (display) — sprawdzić przed startem produkcyjnym.
 
-Worker:  python -m tape.market --every 300
+Worker:  python -m tape market --every 300
 """
 
 from __future__ import annotations
@@ -281,7 +281,3 @@ def main(argv=None):
         if args.once:
             break
         time.sleep(args.every)
-
-
-if __name__ == "__main__":
-    main()
